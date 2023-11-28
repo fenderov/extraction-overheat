@@ -1,0 +1,144 @@
+TILE_WIDTH = 256
+TILE_HEIGHT = 384
+TILE_SCALE = 0.3
+X_OFFSET = TILE_WIDTH * TILE_SCALE * 5
+Y_OFFSET = TILE_WIDTH * TILE_SCALE * 4
+MAP_BORDER = 20
+
+function instantiate_tile(self, x, y)
+	position = vmath.vector3(x * TILE_WIDTH / 2 * TILE_SCALE + X_OFFSET, y * TILE_HEIGHT / 2 * TILE_SCALE + Y_OFFSET, 0)
+	self.map[x][y] =  factory.create("#hex_factory", position, nil, nil, TILE_SCALE)
+end
+
+function get_tile(self, x, y)
+	if self.map[x] ~= nil and self.map[x][y] ~= nil then
+		return self.map[x][y]
+	else
+		return nil
+	end
+end
+
+function set_focus(self, id)
+	if self.focus == id then
+		return
+	end
+	tile_release_focus(self, self.focus)
+	self.focus = id
+	tile_set_focus(self, self.focus)
+end
+
+function tile_click(self, id)
+	if id ~= nil then
+		msg.post(id, "play_animation", {id = hash("hexDesertYellowCactiForest00")})
+	end
+end
+
+function tile_set_focus(self, id)
+	if id ~= nil then
+		msg.post(id, "play_animation", {id = hash("hexPlains00")})
+	end
+end
+
+function tile_release_focus(self, id)
+	if id ~= nil then
+		msg.post(id, "play_animation", {id = hash("hexBase00")})
+	end
+end
+
+
+function instanciate_circle(self, r)
+	for i = 0, r - 1 do
+		instantiate_tile(self, -2 * r + i, i)
+		instantiate_tile(self, -r + 2 * i, r)
+		instantiate_tile(self, r + i, r - i)
+		instantiate_tile(self, 2 * r - i, -i)
+		instantiate_tile(self, r - 2 * i, -r)
+		instantiate_tile(self, -r - i, -r + i)
+	end
+end
+
+function init(self)
+	-- msg.post("@render:", "use_fixed_fit_projection", { near = -1, far = 1 })
+	msg.post(".", "acquire_input_focus")
+	self.map = {}
+	for i = -MAP_BORDER, MAP_BORDER do
+		self.map[i] = {}
+	end 
+	instantiate_tile(self, 0, 0)
+	instanciate_circle(self, 1)
+	instanciate_circle(self, 2)
+	instanciate_circle(self, 3)
+	instanciate_circle(self, 4)
+	-- Add initialization code here
+	-- Learn more: https://defold.com/manuals/script/
+	-- Remove this function if not needed
+end
+
+function final(self)
+	-- Add finalization code here
+	-- Learn more: https://defold.com/manuals/script/
+	-- Remove this function if not needed
+end
+
+function update(self, dt)
+	-- Add update code here
+	-- Learn more: https://defold.com/manuals/script/
+	-- Remove this function if not needed
+end
+
+function fixed_update(self, dt)
+	-- This function is called if 'Fixed Update Frequency' is enabled in the Engine section of game.project
+	-- Can be coupled with fixed updates of the physics simulation if 'Use Fixed Timestep' is enabled in
+	-- Physics section of game.project
+	-- Add update code here
+	-- Learn more: https://defold.com/manuals/script/
+	-- Remove this function if not needed
+end
+
+function on_message(self, message_id, message, sender)
+	-- Add message-handling code here
+	-- Learn more: https://defold.com/manuals/message-passing/
+	-- Remove this function if not needed
+end
+
+function on_input(self, action_id, action)
+	if action.x and action.y then
+		ox = (action.x - X_OFFSET) / TILE_WIDTH * 2 / TILE_SCALE
+		oy = (action.y - Y_OFFSET) / TILE_HEIGHT * 2 / TILE_SCALE
+		tx = math.floor(ox)
+		ty = math.floor(oy)
+		x = ox - tx
+		y = oy - ty
+		if (tx + ty) % 2 == 0 then
+			if x + 3 * y > 1 then
+				tx = tx + 1
+				ty = ty + 1
+			end
+		else
+			if -x + 3 * y > 0 then
+				ty = ty + 1
+			else
+				tx = tx + 1
+			end
+		end
+		id = get_tile(self, tx, ty)
+		set_focus(self, id)
+	end
+	if action_id == hash("touch") and action.released then
+	end
+	-- Add input-handling code here. The game object this script is attached to
+	-- must have acquired input focus:
+	--
+	--    msg.post(".", "acquire_input_focus")
+	--
+	-- All mapped input bindings will be received. Mouse and touch input will
+	-- be received regardless of where on the screen it happened.
+	-- Learn more: https://defold.com/manuals/input/
+	-- Remove this function if not needed
+end
+
+function on_reload(self)
+	-- Add reload-handling code here
+	-- Learn more: https://defold.com/manuals/hot-reload/
+	-- Remove this function if not needed
+end
