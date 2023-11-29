@@ -1,6 +1,6 @@
 components {
   id: "hex_factory"
-  component: "/main/hex_factory.factory"
+  component: "/main/map/hex/hex_factory.factory"
   position {
     x: 0.0
     y: 0.0
@@ -15,7 +15,7 @@ components {
 }
 components {
   id: "map"
-  component: "/main/map.script"
+  component: "/main/map/map.script"
   position {
     x: 0.0
     y: 0.0

@@ -1,13 +1,81 @@
 TILE_WIDTH = 256
 TILE_HEIGHT = 384
-TILE_SCALE = 0.3
-X_OFFSET = TILE_WIDTH * TILE_SCALE * 5
-Y_OFFSET = TILE_WIDTH * TILE_SCALE * 4
+PLAY_ZONE_PADDING = 10
+SCREEN_WIDTH = 1920
+GUI_PLAY_ZONE_WIDTH = 1300
+GUI_PLAY_ZONE_HEIGHT = 1080
+PLAY_ZONE_WIDTH = GUI_PLAY_ZONE_WIDTH - PLAY_ZONE_PADDING * 2
+PLAY_ZONE_HEIGHT = GUI_PLAY_ZONE_HEIGHT - PLAY_ZONE_PADDING * 2
+X_SCALED_OFFSET = 0
+Y_SCALED_OFFSET = TILE_HEIGHT / 6
+X_OFFSET =  (SCREEN_WIDTH - GUI_PLAY_ZONE_WIDTH) / 2
+Y_OFFSET = 0
 MAP_BORDER = 20
 
+local camera = require "orthographic.camera"
+
+function world_to_tile(self, v)
+	ox = ((v.x - X_OFFSET) / self.scale - X_SCALED_OFFSET) / TILE_WIDTH * 2
+	oy = ((v.y - Y_OFFSET) / self.scale - Y_SCALED_OFFSET) / TILE_HEIGHT * 2
+	tx = math.floor(ox)
+	ty = math.floor(oy)
+	x = ox - tx
+	y = oy - ty
+	if (tx + ty) % 2 == 0 then
+		if x + 3 * y > 1 then
+			tx = tx + 1
+			ty = ty + 1
+		end
+	else
+		if -x + 3 * y > 0 then
+			ty = ty + 1
+		else
+			tx = tx + 1
+		end
+	end
+	return tx, ty
+end
+
+function tile_to_world(self, x, y)
+	return vmath.vector3(
+	(x * TILE_WIDTH / 2 + X_SCALED_OFFSET) * self.scale + X_OFFSET,
+	(y * TILE_HEIGHT / 2 + Y_SCALED_OFFSET) * self.scale + Y_OFFSET,
+	0)
+end
+
+function redraw(self)
+	for x, row in pairs(self.map) do
+		for y, _ in pairs(self.map) do
+			if self.map[x][y] ~= nil then
+				go.set(self.map[x][y], "scale", self.scale)
+				go.set(self.map[x][y], "position", tile_to_world(self, x, y))
+			end
+		end
+	end
+end
+
+function check_boundaries(self, r)
+	if self.r == nil or r > self.r then
+		self.r = r
+		self.scale = math.min(PLAY_ZONE_WIDTH / TILE_WIDTH / (2 * r + 1), PLAY_ZONE_HEIGHT / TILE_WIDTH / (1.5 * r + 1))
+		redraw(self)
+	end
+end
+
 function instantiate_tile(self, x, y)
-	position = vmath.vector3(x * TILE_WIDTH / 2 * TILE_SCALE + X_OFFSET, y * TILE_HEIGHT / 2 * TILE_SCALE + Y_OFFSET, 0)
-	self.map[x][y] =  factory.create("#hex_factory", position, nil, nil, TILE_SCALE)
+	check_boundaries(self, (math.abs(x) + math.abs(y)) / 2)
+	self.map[x][y] =  factory.create("#hex_factory", tile_to_world(self, x, y), nil, nil, self.scale)
+end
+
+function instanciate_circle(self, r)
+	for i = 0, r - 1 do
+		instantiate_tile(self, -2 * r + i, i)
+		instantiate_tile(self, -r + 2 * i, r)
+		instantiate_tile(self, r + i, r - i)
+		instantiate_tile(self, 2 * r - i, -i)
+		instantiate_tile(self, r - 2 * i, -r)
+		instantiate_tile(self, -r - i, -r + i)
+	end
 end
 
 function get_tile(self, x, y)
@@ -45,30 +113,20 @@ function tile_release_focus(self, id)
 	end
 end
 
-
-function instanciate_circle(self, r)
-	for i = 0, r - 1 do
-		instantiate_tile(self, -2 * r + i, i)
-		instantiate_tile(self, -r + 2 * i, r)
-		instantiate_tile(self, r + i, r - i)
-		instantiate_tile(self, 2 * r - i, -i)
-		instantiate_tile(self, r - 2 * i, -r)
-		instantiate_tile(self, -r - i, -r + i)
-	end
-end
-
 function init(self)
+	msg.post("camera", "use_projection", { projection = hash("FIXED_AUTO") })
+	-- camera.use_projector(nil, hash("FIXED_AUTO"))
 	-- msg.post("@render:", "use_fixed_fit_projection", { near = -1, far = 1 })
-	msg.post(".", "acquire_input_focus")
 	self.map = {}
 	for i = -MAP_BORDER, MAP_BORDER do
 		self.map[i] = {}
 	end 
 	instantiate_tile(self, 0, 0)
-	instanciate_circle(self, 1)
-	instanciate_circle(self, 2)
-	instanciate_circle(self, 3)
-	instanciate_circle(self, 4)
+	msg.post(".", "acquire_input_focus")
+	-- instanciate_circle(self, 1)
+	-- instanciate_circle(self, 2)
+	-- instanciate_circle(self, 3)
+	-- instanciate_circle(self, 4)
 	-- Add initialization code here
 	-- Learn more: https://defold.com/manuals/script/
 	-- Remove this function if not needed
@@ -103,28 +161,17 @@ end
 
 function on_input(self, action_id, action)
 	if action.x and action.y then
-		ox = (action.x - X_OFFSET) / TILE_WIDTH * 2 / TILE_SCALE
-		oy = (action.y - Y_OFFSET) / TILE_HEIGHT * 2 / TILE_SCALE
-		tx = math.floor(ox)
-		ty = math.floor(oy)
-		x = ox - tx
-		y = oy - ty
-		if (tx + ty) % 2 == 0 then
-			if x + 3 * y > 1 then
-				tx = tx + 1
-				ty = ty + 1
-			end
-		else
-			if -x + 3 * y > 0 then
-				ty = ty + 1
-			else
-				tx = tx + 1
-			end
-		end
+		v = camera.screen_to_world(nil, vmath.vector3(action.x, action.y, 0))
+		tile = world_to_tile(self, v)
 		id = get_tile(self, tx, ty)
 		set_focus(self, id)
 	end
 	if action_id == hash("touch") and action.released then
+		v = camera.screen_to_world(nil, vmath.vector3(action.x, action.y, 0))
+		tx, ty = world_to_tile(self, v)
+		if tx == 0 and ty == 0 then
+			instanciate_circle(self, self.r + 1)
+		end
 	end
 	-- Add input-handling code here. The game object this script is attached to
 	-- must have acquired input focus:
