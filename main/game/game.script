@@ -1,50 +1,344 @@
+TILE_WIDTH = 256
+TILE_HEIGHT = 384
+PLAY_ZONE_PADDING = 10
+SCREEN_WIDTH = 1920
+GUI_PLAY_ZONE_WIDTH = 1300
+GUI_PLAY_ZONE_HEIGHT = 1080
+PLAY_ZONE_WIDTH = GUI_PLAY_ZONE_WIDTH - PLAY_ZONE_PADDING * 2
+PLAY_ZONE_HEIGHT = GUI_PLAY_ZONE_HEIGHT - PLAY_ZONE_PADDING * 2
+X_SCALED_OFFSET = 0
+Y_SCALED_OFFSET = TILE_HEIGHT / 6
+X_OFFSET = 0
+Y_OFFSET = 0
+
+local camera = require "orthographic.camera"
+
+function world_to_tile(self, v)
+	ox = ((v.x - X_OFFSET) / self.scale - X_SCALED_OFFSET) / TILE_WIDTH * 2
+	oy = ((v.y - Y_OFFSET) / self.scale - Y_SCALED_OFFSET) / TILE_HEIGHT * 2
+	tx = math.floor(ox)
+	ty = math.floor(oy)
+	x = ox - tx
+	y = oy - ty
+	if (tx + ty) % 2 == 0 then
+		if x + 3 * y > 1 then
+			tx = tx + 1
+			ty = ty + 1
+		end
+	else
+		if -x + 3 * y > 0 then
+			ty = ty + 1
+		else
+			tx = tx + 1
+		end
+	end
+	return tx, ty
+end
+
+function tile_to_world(self, x, y)
+	return vmath.vector3(
+	(x * TILE_WIDTH / 2 + X_SCALED_OFFSET) * self.scale + X_OFFSET,
+	(y * TILE_HEIGHT / 2 + Y_SCALED_OFFSET) * self.scale + Y_OFFSET,
+	0)
+end
+
+function map_update_tile(self, x, y)
+	if self.map[x][y].visible then
+		if self.map[x][y].id == nil then
+			self.map[x][y].id = factory.create("#hex_factory", tile_to_world(self, x, y), nil, nil, self.scale)
+		end
+	else
+		if self.map[x][y].id ~= nil then
+			go.delete(self.map[x][y].id)
+			self.map[x][y].id = nil
+		end
+		return
+	end
+	--DEBUG
+	if self.map[x][y].unit == Unit.WORKER then
+		msg.post(self.map[x][y].id, "play_animation", {id = hash("hexDesertYellowCactiForest00")})
+	elseif self.map[x][y].active then
+		msg.post(self.map[x][y].id, "play_animation", {id = hash("hexPlains00")})
+	else
+		msg.post(self.map[x][y].id, "play_animation", {id = hash("hexBase00")})
+	end
+	go.animate(self.map[x][y].id, "scale", go.PLAYBACK_ONCE_FORWARD, self.scale, go.EASING_OUTBOUNCE, 1)
+	go.animate(self.map[x][y].id, "position", go.PLAYBACK_ONCE_FORWARD, tile_to_world(self, x, y), go.EASING_OUTBOUNCE, 1)
+	-- go.set(self.map[x][y].id, "scale", self.scale)
+	-- go.set(self.map[x][y].id, "position", tile_to_world(self, x, y))
+end
+
+function map_update(self)
+	for r = 0, MAP_RADIUS do
+		for x, y in circle_coordinates(r) do
+			map_update_tile(self, x, y)
+		end
+	end
+end
+
+function map_set_radius(self, r)
+	self.radius = r
+	self.scale = math.min(PLAY_ZONE_WIDTH / TILE_WIDTH / (2 * r + 1), PLAY_ZONE_HEIGHT / TILE_WIDTH / (1.5 * r + 1))
+	map_update(self)
+end
+
+MAP_RADIUS = 4
+
+Landscape = {
+	PLAINS = 0,
+	FOREST = 1,
+	STONES = 2
+}
+
+Building = {
+	NONE = 0
+}
+
+Unit = {
+	NONE = 0,
+	WORKER = 1,
+	BARBARIAN = 2
+}
+
+function circle_coordinates_generator(r)
+	if r == 0 then
+		coroutine.yield(0, 0)
+	elseif r > 0 then
+		for i = 0, r - 1 do
+			coroutine.yield(-2 * r + i, i)
+			coroutine.yield(-r + 2 * i, r)
+			coroutine.yield(r + i, r - i)
+			coroutine.yield(2 * r - i, -i)
+			coroutine.yield(r - 2 * i, -r)
+			coroutine.yield(-r - i, -r + i)
+		end
+	end
+end
+
+function circle_coordinates(r)
+	return coroutine.wrap(function() circle_coordinates_generator(r) end)
+end
+
+function generate_tile(self, x, y)
+	self.map[x][y] = {
+		id = nil,
+		visible = false,
+		active = true,
+		landscape = Landscape.PLAINS,
+		building = Building.NONE,
+		unit = Unit.NONE
+	}
+end
+
+function generate_circle(self, r)
+	for x, y in circle_coordinates(r) do
+		generate_tile(self, x, y)
+	end
+end
+
+function generate_map(self)
+	self.map = {}
+	for i = -MAP_RADIUS * 2, MAP_RADIUS * 2 do
+		self.map[i] = {}
+	end
+	for r = 0, MAP_RADIUS do
+		generate_circle(self, r)
+	end
+end
+
+function show_tile(self, x, y)
+	self.map[x][y].visible = true
+	map_update_tile(self, x, y)
+end
+
+function show_circle(self, r)
+	for x, y in circle_coordinates(r) do
+		show_tile(self, x, y)
+	end
+end
+
+function hide_tile(self, x, y)
+	self.map[x][y].visible = false
+	map_update_tile(self, x, y)
+end
+
+function hide_circle(self, r)
+	for x, y in circle_coordinates(r) do
+		hide_tile(self, x, y)
+	end
+end
+
+function set_tile_active(self, x, y, active)
+	self.map[x][y].active = active
+end
+	
+
+function active_filter(self, is_active)
+	for r = 0, MAP_RADIUS do
+		for x, y in circle_coordinates(r) do
+			set_tile_active(self, x, y, is_active(self, x, y))
+		end
+	end
+	map_update(self)
+end
+
+function worker_move(self, x, y, tx, ty)
+	self.map[x][y].unit = Unit.NONE
+	self.map[tx][ty].unit = Unit.WORKER
+	map_update(self)
+	-- TODO animation and everything else
+end
+
+function tile_click(self, x, y)
+	if self.map[x] ~= nil and self.map[x][y] ~= nil and self.map[x][y].id ~= nil then
+		print("Tile click:", x, y)
+		if self.player_turn_state == PlayerTurnState.FREE then
+			if self.map[x][y].unit == Unit.WORKER then
+				msg.post("gui", hash("render_action"), {options = {"move"}})
+			end
+		elseif self.player_turn_state == PlayerTurnState.TARGET then
+			self.player_turn_state = PlayerTurnState.FREE
+		end
+	end
+end
+
+function spawn_unit(self, x, y, unit)
+	self.map[x][y].unit = unit
+	map_update_tile(self, x, y)
+end
+
+function get_radius(x, y)
+	return (math.abs(x) + math.abs(y)) / 2
+end
+
+function get_distance(x, y, tx, ty)
+	return math.max(math.abs(tx - x) / 2, math.abs(ty - y))
+end
+
+function enemy_turn(self)
+
+	-- TEST PART
+	if self.radius == 2 then
+		show_circle(self, 3)
+		map_set_radius(self, 3)
+	elseif self.radius == 3 then
+		show_circle(self, 4)
+		map_set_radius(self, 4)
+	elseif self.radius == 4 then
+		hide_circle(self, 3)
+		hide_circle(self, 4)
+		map_set_radius(self, 2)
+	end
+	-- END TEST PART
+end
+
+local TILE_CLICK_MSG = hash("tile_click")
+local END_TURN_CLICK_MSG = hash("end_turn_click")
+local MOVE_ACTION_CLICK_MSG = hash("move_action_click")
+
+FreeGameState = function(self)
+	msg.post("gui", hash("render_end_turn"), {id = END_TURN_CLICK_MSG})
+	handler = function(self, message_id, message)
+		if message_id == TILE_CLICK_MSG then
+			if self.map[message.x][message.y].unit == Unit.WORKER then
+				msg.post("gui", hash("delete_end_turn"))
+				self.state = WorkerActionGameState(self, x, y)
+			end
+		elseif message_id == END_TURN_CLICK_MSG then
+			msg.post("gui", hash("delete_end_turn"))
+			self.state = EnemyTurnGameState(self)
+		end
+	end
+	return {
+		message_handler = handler
+	}
+end
+
+WorkerActionGameState = function(self, x, y)
+	msg.post("gui", hash("render_end_turn"), {id = END_TURN_CLICK_MSG})
+	msg.post("gui", hash("render_action"), {options = {move = MOVE_ACTION_CLICK_MSG}})
+	handler = function(self, message_id, message)
+		-- TODO REMOVE
+		-- msg.post("gui", hash("render_action"), {options = {"move"}})
+		-- END TODO
+		if message_id == TILE_CLICK_MSG then
+			msg.post("gui", hash("delete_action"))
+			msg.post("gui", hash("delete_end_turn"))
+			if self.map[message.x][message.y].unit == Unit.WORKER then
+				self.state = WorkerActionGameState(self, x, y)
+			else
+				self.state = FreeGameState(self)
+			end
+		elseif message_id == END_TURN_CLICK_MSG then
+			msg.post("gui", hash("delete_action"))
+			msg.post("gui", hash("delete_end_turn"))
+			self.state = EnemyTurnGameState(self)
+		elseif message_id == MOVE_ACTION_CLICK_MSG then
+			msg.post("gui", hash("delete_action"))
+			msg.post("gui", hash("delete_end_turn"))
+			self.state = WorkerMoveGameState(self, x , y)
+		end
+	end
+	return {
+		message_handler = handler
+	}
+end
+
+WorkerMoveGameState = function(self, x, y)
+	local is_target = function(self, tx, ty)
+		return get_distance(x, y, tx, ty) == 1 and self.map[tx][ty].visible == true
+	end
+	active_filter(self, is_target)
+	handler = function(self, message_id, message)
+		active_filter(self, function(self, x, y) return true end)
+		if message_id == TILE_CLICK_MSG then
+			if is_target(self, message.x, message.y) then
+				worker_move(self, x, y, message.x, message.y)
+				self.state = FreeGameState(self)
+			else
+				self.state = WorkerActionGameState(self, x, y)
+			end
+		elseif message_id == END_TURN_CLICK_MSG then
+			self.state = EnemyTurnGameState(self)
+		end
+	end
+	return {
+		message_handler = handler
+	}
+end
+
+EnemyTurnGameState = function(self)
+	handler = function(self, message_id, message)
+	end
+	enemy_turn(self)
+	self.state = FreeGameState(self)
+	return {
+		message_handler = handler
+	}
+end
+
 function init(self)
-	-- Add initialization code here
-	-- Learn more: https://defold.com/manuals/script/
-	-- Remove this function if not needed
-end
-
-function final(self)
-	-- Add finalization code here
-	-- Learn more: https://defold.com/manuals/script/
-	-- Remove this function if not needed
-end
-
-function update(self, dt)
-	-- Add update code here
-	-- Learn more: https://defold.com/manuals/script/
-	-- Remove this function if not needed
-end
-
-function fixed_update(self, dt)
-	-- This function is called if 'Fixed Update Frequency' is enabled in the Engine section of game.project
-	-- Can be coupled with fixed updates of the physics simulation if 'Use Fixed Timestep' is enabled in
-	-- Physics section of game.project
-	-- Add update code here
-	-- Learn more: https://defold.com/manuals/script/
-	-- Remove this function if not needed
+	generate_map(self)
+	map_set_radius(self, 2)
+	show_circle(self, 0)
+	show_circle(self, 1)
+	show_circle(self, 2)
+	spawn_unit(self, 0, 0, Unit.WORKER)
+	self.state = FreeGameState(self)
+	msg.post("camera", "use_projection", { projection = hash("FIXED_AUTO") })
+	msg.post(".", "acquire_input_focus")
 end
 
 function on_message(self, message_id, message, sender)
-	-- Add message-handling code here
-	-- Learn more: https://defold.com/manuals/message-passing/
-	-- Remove this function if not needed
+	self.state.message_handler(self, message_id, message)
 end
 
 function on_input(self, action_id, action)
-	-- Add input-handling code here. The game object this script is attached to
-	-- must have acquired input focus:
-	--
-	--    msg.post(".", "acquire_input_focus")
-	--
-	-- All mapped input bindings will be received. Mouse and touch input will
-	-- be received regardless of where on the screen it happened.
-	-- Learn more: https://defold.com/manuals/input/
-	-- Remove this function if not needed
-end
-
-function on_reload(self)
-	-- Add reload-handling code here
-	-- Learn more: https://defold.com/manuals/hot-reload/
-	-- Remove this function if not needed
+	if action_id == hash("touch") and action.released then
+		v = camera.screen_to_world(nil, vmath.vector3(action.x, action.y, 0))
+		x, y = world_to_tile(self, v)
+		if self.map[x] ~= nil and self.map[x][y] ~= nil and self.map[x][y].id ~= nil then
+			msg.post(".", TILE_CLICK_MSG, {x = x, y = y})
+		end
+	end
 end

@@ -1,0 +1,105 @@
+local function delete_action(self)
+	for node, _ in pairs(self.action) do
+		gui.delete_node(node)
+		self.active_buttons[node] = nil
+	end
+	self.action = {}
+end
+
+local function render_action(self, message)
+	local button_node = gui.get_node("action_button/action_button_base")
+	for option, message_id in pairs(message.options) do
+		if option == "move" then
+			nodes = gui.clone_tree(button_node)
+			clone = nodes[hash("action_button/action_button_base")]
+			self.active_buttons[clone] = message_id
+			self.action[clone] = message_id
+			gui.set_enabled(clone, true)
+		end
+	end
+end
+
+local function delete_end_turn(self)
+	for node, _ in pairs(self.end_turn) do
+		gui.delete_node(node)
+		self.active_buttons[node] = nil
+	end
+	self.end_turn = {}
+end
+
+local function render_end_turn(self, message)
+	local button_node = gui.get_node("end_turn_button/button_box")
+	nodes = gui.clone_tree(button_node)
+	clone = nodes[hash("end_turn_button/button_box")]
+	self.active_buttons[clone] = message.id
+	self.end_turn[clone] = message.id
+	gui.set_enabled(clone, true)
+end
+
+
+function init(self)
+	msg.post(".", "acquire_input_focus")
+	self.active_buttons = {}
+	self.action = {}
+	self.end_turn = {}
+	-- Add initialization code here
+	-- Learn more: https://defold.com/manuals/script/
+	-- Remove this function if not needed
+end
+
+function final(self)
+	-- Add finalization code here
+	-- Learn more: https://defold.com/manuals/script/
+	-- Remove this function if not needed
+end
+
+function update(self, dt)
+	-- Add update code here
+	-- Learn more: https://defold.com/manuals/script/
+	-- Remove this function if not needed
+end
+
+function on_message(self, message_id, message, sender)
+	if message_id == hash("delete_end_turn") then
+		delete_end_turn(self)
+	end
+	if message_id == hash("render_end_turn") then
+		delete_end_turn(self)
+		render_end_turn(self, message)
+	end
+	if message_id == hash("delete_action") then
+		delete_action(self)
+	end
+	if message_id == hash("render_action") then
+		delete_action(self)
+		render_action(self, message)
+	end
+	-- Add message-handling code here
+	-- Learn more: https://defold.com/manuals/message-passing/
+	-- Remove this function if not needed
+end
+
+function on_input(self, action_id, action)
+	if action_id == hash("touch") and action.released then
+		for node, message_id in pairs(self.active_buttons) do
+			if gui.pick_node(node, action.x, action.y) then
+				msg.post("game", message_id)
+			end
+		end
+	end
+	-- Add input-handling code here. The game object this script is attached to
+	-- must have acquired input focus:
+	--
+	--    msg.post(".", "acquire_input_focus")
+	--
+	-- All mapped input bindings will be received. Mouse and touch input will
+	-- be received regardless of where on the screen it happened.
+	-- Learn more: https://defold.com/manuals/input/
+	-- Remove this function if not needed
+end
+
+function on_reload(self)
+	-- Add reload-handling code here
+	-- Learn more: https://defold.com/manuals/hot-reload/
+	-- Remove this function if not needed
+end
