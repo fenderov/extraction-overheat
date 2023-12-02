@@ -1,5 +1,9 @@
 images {
-  image: "/main/source/sample_units/worker.png"
+  image: "/main/source/units/unit_barbarian.png"
+  sprite_trim_mode: SPRITE_TRIM_MODE_OFF
+}
+images {
+  image: "/main/source/units/unit_worker.png"
   sprite_trim_mode: SPRITE_TRIM_MODE_OFF
 }
 margin: 0

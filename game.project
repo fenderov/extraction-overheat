@@ -16,3 +16,7 @@ input_method = HiddenInputField
 title = Agressive Barbarians
 dependencies#0 = https://github.com/britzl/defold-orthographic/archive/refs/tags/3.2.1.zip
 
+[graphics]
+default_texture_min_filter = nearest
+default_texture_mag_filter = nearest
+

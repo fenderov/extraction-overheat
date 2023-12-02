@@ -10,6 +10,10 @@ X_SCALED_OFFSET = 0
 Y_SCALED_OFFSET = TILE_HEIGHT / 6
 X_OFFSET = 0
 Y_OFFSET = 0
+Z_SCALE = -0.001
+UNIX_OFFSET = 0
+UNIT_X_SCALED_OFFSET = 0
+UNIT_Y_SCALED_OFFSET = TILE_HEIGHT / 6 - 32
 
 local camera = require "orthographic.camera"
 
@@ -39,6 +43,14 @@ function tile_to_world(self, x, y)
 	return vmath.vector3(
 	(x * TILE_WIDTH / 2 + X_SCALED_OFFSET) * self.scale + X_OFFSET,
 	(y * TILE_HEIGHT / 2 + Y_SCALED_OFFSET) * self.scale + Y_OFFSET,
+	y * Z_SCALE
+	)
+end
+
+function unit_to_world(self, x, y)
+	return vmath.vector3(
+	(x * TILE_WIDTH / 2 + UNIT_X_SCALED_OFFSET) * self.scale + X_OFFSET,
+	(y * TILE_HEIGHT / 2 + UNIT_Y_SCALED_OFFSET) * self.scale + Y_OFFSET,
 	0)
 end
 
@@ -54,16 +66,41 @@ function map_update_tile(self, x, y)
 		end
 		return
 	end
-	--DEBUG
-	if self.map[x][y].unit == Unit.WORKER then
-		msg.post(self.map[x][y].id, "play_animation", {id = hash("hexDesertYellowCactiForest00")})
-	elseif self.map[x][y].active then
-		msg.post(self.map[x][y].id, "play_animation", {id = hash("hexPlains00")})
+	if self.map[x][y].unit.type == Unit.WORKER then
+		if self.map[x][y].unit.id == nil then
+			self.map[x][y].unit.id = factory.create("#unit_factory", unit_to_world(self, x, y), nil, nil, self.scale)
+		end
 	else
-		msg.post(self.map[x][y].id, "play_animation", {id = hash("hexBase00")})
+		if self.map[x][y].unit.id ~= nil then
+			go.delete(self.map[x][y].unit.id)
+			self.map[x][y].unit.id = nil
+		end
+	end
+	if self.map[x][y].building == Building.FARM then
+		if self.map[x][y].active then
+			msg.post(self.map[x][y].id, "play_animation", {id = hash("farm")})
+		else
+			msg.post(self.map[x][y].id, "play_animation", {id = hash("farm_not_active")})
+		end
+	elseif self.map[x][y].building == Building.SAWMILL then
+		if self.map[x][y].active then
+			msg.post(self.map[x][y].id, "play_animation", {id = hash("sawmill")})
+		else
+			msg.post(self.map[x][y].id, "play_animation", {id = hash("sawmill_not_active")})
+		end
+	else
+		if self.map[x][y].active then
+			msg.post(self.map[x][y].id, "play_animation", {id = hash("hex_base_active")})
+		else
+			msg.post(self.map[x][y].id, "play_animation", {id = hash("hex_base_not_active")})
+		end
 	end
 	go.animate(self.map[x][y].id, "scale", go.PLAYBACK_ONCE_FORWARD, self.scale, go.EASING_OUTBOUNCE, 1)
 	go.animate(self.map[x][y].id, "position", go.PLAYBACK_ONCE_FORWARD, tile_to_world(self, x, y), go.EASING_OUTBOUNCE, 1)
+	if self.map[x][y].unit.id ~= nil then
+		go.animate(self.map[x][y].unit.id, "scale", go.PLAYBACK_ONCE_FORWARD, self.scale, go.EASING_OUTBOUNCE, 1)
+		go.animate(self.map[x][y].unit.id, "position", go.PLAYBACK_ONCE_FORWARD, unit_to_world(self, x, y), go.EASING_OUTBOUNCE, 1)
+	end
 	-- go.set(self.map[x][y].id, "scale", self.scale)
 	-- go.set(self.map[x][y].id, "position", tile_to_world(self, x, y))
 end
@@ -91,7 +128,9 @@ Landscape = {
 }
 
 Building = {
-	NONE = 0
+	NONE = 0,
+	FARM = 1,
+	SAWMIL = 2
 }
 
 Unit = {
@@ -126,7 +165,10 @@ function generate_tile(self, x, y)
 		active = true,
 		landscape = Landscape.PLAINS,
 		building = Building.NONE,
-		unit = Unit.NONE
+		unit = {
+			type = Unit.NONE,
+			id = nil
+		}
 	}
 end
 
@@ -183,15 +225,20 @@ function active_filter(self, is_active)
 end
 
 function worker_move(self, x, y, tx, ty)
-	self.map[x][y].unit = Unit.NONE
-	self.map[tx][ty].unit = Unit.WORKER
+	self.map[x][y].unit.type = Unit.NONE
+	self.map[tx][ty].unit.type = Unit.WORKER
+	map_update(self)
+	-- TODO animation and everything else
+end
+
+local function build(self, x, y, building)
+	self.map[x][y].building = building
 	map_update(self)
 	-- TODO animation and everything else
 end
 
 function tile_click(self, x, y)
 	if self.map[x] ~= nil and self.map[x][y] ~= nil and self.map[x][y].id ~= nil then
-		print("Tile click:", x, y)
 		if self.player_turn_state == PlayerTurnState.FREE then
 			if self.map[x][y].unit == Unit.WORKER then
 				msg.post("gui", hash("render_action"), {options = {"move"}})
@@ -203,7 +250,7 @@ function tile_click(self, x, y)
 end
 
 function spawn_unit(self, x, y, unit)
-	self.map[x][y].unit = unit
+	self.map[x][y].unit.type = unit
 	map_update_tile(self, x, y)
 end
 
@@ -232,90 +279,152 @@ function enemy_turn(self)
 	-- END TEST PART
 end
 
+local function ChangeState(self, state)
+	if self.state.destroy ~= nil then
+		self.state.destroy(self)
+	end
+	
+	self.state = state
+	
+	if self.state.gui ~= nil then
+		msg.post("gui", hash("render"), self.state.gui)
+	else
+		msg.post("gui", hash("render"), {})
+	end
+	if self.state.init ~= nil then
+		self.state.init(self)
+	end
+	map_update(self)
+end
+
 local TILE_CLICK_MSG = hash("tile_click")
 local END_TURN_CLICK_MSG = hash("end_turn_click")
 local MOVE_ACTION_CLICK_MSG = hash("move_action_click")
+local BUILD_ACTION_CLICK_MSG = hash("build_action_click")
+local BACK_CLICK_MSG = hash("back_click")
+local FARM_BUILD_CLICK_MSG = hash("farm_build_click")
+local SAWMILL_BUILD_CLICK_MSG = hash("sawmill_build_click")
 
-FreeGameState = function(self)
-	msg.post("gui", hash("render_end_turn"), {id = END_TURN_CLICK_MSG})
-	handler = function(self, message_id, message)
-		if message_id == TILE_CLICK_MSG then
-			if self.map[message.x][message.y].unit == Unit.WORKER then
-				msg.post("gui", hash("delete_end_turn"))
-				self.state = WorkerActionGameState(self, x, y)
+local GameState = {
+	None = {},
+	Free = {},
+	WorkerAction = {},
+	WorkerBuild = {},
+	EnemyTurn = {},
+}
+
+GameState.Free = {
+	gui = {
+		end_turn = END_TURN_CLICK_MSG
+	},
+	message_handler = {
+		[TILE_CLICK_MSG] = function(self, message)
+			if self.map[message.x][message.y].unit.type == Unit.WORKER then
+				self.focus.x = message.x
+				self.focus.y = message.y
+				ChangeState(self, GameState.WorkerAction)
 			end
-		elseif message_id == END_TURN_CLICK_MSG then
-			msg.post("gui", hash("delete_end_turn"))
-			self.state = EnemyTurnGameState(self)
-		end
-	end
-	return {
-		message_handler = handler
+		end,
+		[END_TURN_CLICK_MSG] = function(self, message)
+			ChangeState(self, GameState.EnemyTurn)
+		end,
 	}
-end
+}
 
-WorkerActionGameState = function(self, x, y)
-	msg.post("gui", hash("render_end_turn"), {id = END_TURN_CLICK_MSG})
-	msg.post("gui", hash("render_action"), {options = {move = MOVE_ACTION_CLICK_MSG}})
-	handler = function(self, message_id, message)
-		-- TODO REMOVE
-		-- msg.post("gui", hash("render_action"), {options = {"move"}})
-		-- END TODO
-		if message_id == TILE_CLICK_MSG then
-			msg.post("gui", hash("delete_action"))
-			msg.post("gui", hash("delete_end_turn"))
-			if self.map[message.x][message.y].unit == Unit.WORKER then
-				self.state = WorkerActionGameState(self, x, y)
+GameState.WorkerAction = {
+	gui = {
+		end_turn = END_TURN_CLICK_MSG,
+		action = {
+			move = MOVE_ACTION_CLICK_MSG,
+			build = BUILD_ACTION_CLICK_MSG,
+			back = BACK_CLICK_MSG
+		}
+	},
+	message_handler = {
+		[TILE_CLICK_MSG] = function(self, message)
+			if self.map[message.x][message.y].unit.type == Unit.WORKER then
+				self.focus.x = message.x
+				self.focus.y = message.y
+				ChangeState(self, GameState.WorkerAction)
 			else
-				self.state = FreeGameState(self)
+				ChangeState(self, GameState.Free)
 			end
-		elseif message_id == END_TURN_CLICK_MSG then
-			msg.post("gui", hash("delete_action"))
-			msg.post("gui", hash("delete_end_turn"))
-			self.state = EnemyTurnGameState(self)
-		elseif message_id == MOVE_ACTION_CLICK_MSG then
-			msg.post("gui", hash("delete_action"))
-			msg.post("gui", hash("delete_end_turn"))
-			self.state = WorkerMoveGameState(self, x , y)
-		end
-	end
-	return {
-		message_handler = handler
+		end,
+		[MOVE_ACTION_CLICK_MSG] = function(self, message)
+			ChangeState(self, GameState.WorkerMove)
+		end,
+		[BUILD_ACTION_CLICK_MSG] = function(self, message)
+			ChangeState(self, GameState.WorkerBuild)
+		end,
+		[BACK_CLICK_MSG] = function(self, message)
+			ChangeState(self, GameState.Free)
+		end,
+		[END_TURN_CLICK_MSG] = function(self, message)
+			ChangeState(self, GameState.EnemyTurn)
+		end,
 	}
-end
+}
 
-WorkerMoveGameState = function(self, x, y)
-	local is_target = function(self, tx, ty)
-		return get_distance(x, y, tx, ty) == 1 and self.map[tx][ty].visible == true
-	end
-	active_filter(self, is_target)
-	handler = function(self, message_id, message)
+GameState.WorkerMove = {
+	init = function(self)
+		-- TEST
+		active_filter(self, function(self, tx, ty)
+			return get_distance(self.focus.x, self.focus.y, tx, ty) == 1 and self.map[tx][ty].visible == true
+		end)
+	end,
+	destroy = function(self)
 		active_filter(self, function(self, x, y) return true end)
-		if message_id == TILE_CLICK_MSG then
-			if is_target(self, message.x, message.y) then
-				worker_move(self, x, y, message.x, message.y)
-				self.state = FreeGameState(self)
-			else
-				self.state = WorkerActionGameState(self, x, y)
+	end,
+	gui = {
+		action = {
+			back = BACK_CLICK_MSG
+		}
+	},
+	message_handler = {
+		[TILE_CLICK_MSG] = function(self, message)
+			if self.map[message.x][message.y].active then
+				worker_move(self, self.focus.x, self.focus.y, message.x, message.y)
+				ChangeState(self, GameState.Free)
 			end
-		elseif message_id == END_TURN_CLICK_MSG then
-			self.state = EnemyTurnGameState(self)
-		end
-	end
-	return {
-		message_handler = handler
+		end,
+		[BACK_CLICK_MSG] = function(self, message)
+			ChangeState(self, GameState.WorkerAction)
+		end,
 	}
-end
+}
 
-EnemyTurnGameState = function(self)
-	handler = function(self, message_id, message)
-	end
-	enemy_turn(self)
-	self.state = FreeGameState(self)
-	return {
-		message_handler = handler
+GameState.WorkerBuild = {
+	gui = {
+		action = {
+			back = BACK_CLICK_MSG
+		},
+		build = {
+			farm = FARM_BUILD_CLICK_MSG,
+			sawmill = SAWMILL_BUILD_CLICK_MSG
+		}
+	},
+	message_handler = {
+		[FARM_BUILD_CLICK_MSG] = function(self, message)
+			build(self, self.focus.x, self.focus.y, Building.FARM)
+			ChangeState(self, GameState.Free)
+		end,
+		[SAWMILL_BUILD_CLICK_MSG] = function(self, message)
+			build(self, self.focus.x, self.focus.y, Building.SAWMILL)
+			ChangeState(self, GameState.Free)
+		end,
+		[BACK_CLICK_MSG] = function(self, message)
+			ChangeState(self, GameState.WorkerAction)
+		end,
 	}
-end
+}
+
+GameState.EnemyTurn = {
+	-- TODO message-based state chane
+	init = function(self)
+		enemy_turn(self)
+		ChangeState(self, GameState.Free)
+	end
+}
 
 function init(self)
 	generate_map(self)
@@ -324,19 +433,23 @@ function init(self)
 	show_circle(self, 1)
 	show_circle(self, 2)
 	spawn_unit(self, 0, 0, Unit.WORKER)
-	self.state = FreeGameState(self)
+	self.focus = {}
+	self.state = GameState.None
+	ChangeState(self, GameState.Free)
 	msg.post("camera", "use_projection", { projection = hash("FIXED_AUTO") })
 	msg.post(".", "acquire_input_focus")
 end
 
 function on_message(self, message_id, message, sender)
-	self.state.message_handler(self, message_id, message)
+	if self.state.message_handler ~= nil and self.state.message_handler[message_id] ~= nil then
+		self.state.message_handler[message_id](self, message)
+	end
 end
 
 function on_input(self, action_id, action)
 	if action_id == hash("touch") and action.released then
-		v = camera.screen_to_world(nil, vmath.vector3(action.x, action.y, 0))
-		x, y = world_to_tile(self, v)
+		local v = camera.screen_to_world(nil, vmath.vector3(action.x, action.y, 0))
+		local x, y = world_to_tile(self, v)
 		if self.map[x] ~= nil and self.map[x][y] ~= nil and self.map[x][y].id ~= nil then
 			msg.post(".", TILE_CLICK_MSG, {x = x, y = y})
 		end
