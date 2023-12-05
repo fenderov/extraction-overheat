@@ -1,9 +1,17 @@
 images {
-  image: "/main/source/units/unit_barbarian.png"
+  image: "/main/source/units/barbarians.png"
   sprite_trim_mode: SPRITE_TRIM_MODE_OFF
 }
 images {
-  image: "/main/source/units/unit_worker.png"
+  image: "/main/source/units/barbarians_grey.png"
+  sprite_trim_mode: SPRITE_TRIM_MODE_OFF
+}
+images {
+  image: "/main/source/units/workers.png"
+  sprite_trim_mode: SPRITE_TRIM_MODE_OFF
+}
+images {
+  image: "/main/source/units/workers_grey.png"
   sprite_trim_mode: SPRITE_TRIM_MODE_OFF
 }
 margin: 0

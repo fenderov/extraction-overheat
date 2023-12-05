@@ -1,25 +1,49 @@
 images {
-  image: "/main/source/hexes/hex_base_active.png"
+  image: "/main/source/hexes/barren.png"
   sprite_trim_mode: SPRITE_TRIM_MODE_OFF
 }
 images {
-  image: "/main/source/hexes/hex_base_not_active.png"
+  image: "/main/source/hexes/barren_grey.png"
   sprite_trim_mode: SPRITE_TRIM_MODE_OFF
 }
 images {
-  image: "/main/source/aseprite_projects/farm.png"
+  image: "/main/source/hexes/farm.png"
   sprite_trim_mode: SPRITE_TRIM_MODE_OFF
 }
 images {
-  image: "/main/source/aseprite_projects/farm_not_active.png"
+  image: "/main/source/hexes/farm_grey.png"
   sprite_trim_mode: SPRITE_TRIM_MODE_OFF
 }
 images {
-  image: "/main/source/aseprite_projects/sawmill.png"
+  image: "/main/source/hexes/farm_off.png"
   sprite_trim_mode: SPRITE_TRIM_MODE_OFF
 }
 images {
-  image: "/main/source/aseprite_projects/sawmill_not_active.png"
+  image: "/main/source/hexes/forest.png"
+  sprite_trim_mode: SPRITE_TRIM_MODE_OFF
+}
+images {
+  image: "/main/source/hexes/forest_grey.png"
+  sprite_trim_mode: SPRITE_TRIM_MODE_OFF
+}
+images {
+  image: "/main/source/hexes/sawmill.png"
+  sprite_trim_mode: SPRITE_TRIM_MODE_OFF
+}
+images {
+  image: "/main/source/hexes/sawmill_grey.png"
+  sprite_trim_mode: SPRITE_TRIM_MODE_OFF
+}
+images {
+  image: "/main/source/hexes/sawmill_off.png"
+  sprite_trim_mode: SPRITE_TRIM_MODE_OFF
+}
+images {
+  image: "/main/source/hexes/wheat.png"
+  sprite_trim_mode: SPRITE_TRIM_MODE_OFF
+}
+images {
+  image: "/main/source/hexes/wheat_grey.png"
   sprite_trim_mode: SPRITE_TRIM_MODE_OFF
 }
 margin: 0
