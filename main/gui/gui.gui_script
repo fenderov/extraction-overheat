@@ -7,14 +7,11 @@ local END_TURN_BUTTON = "end_turn/base"
 local BUILD_FIELD = "build_box"
 local BUILD_FARM_BUTTON = "farm/button/base"
 local BUILD_SAWMILL_BUTTON = "sawmill/button/base"
-
-local function clear_gui(self)
-	for message_id, button in pairs(self.active_buttons) do
-		gui.set_enabled(button, false)
-		self.active_buttons[message_id] = nil
-	end
-	gui.set_enabled(gui.get_node(BUILD_FIELD), false)
-end
+local FOOD_TXT = "sawmill/button/base"
+local BUILD_BUTTON_BOX = "build_button/box"
+local BUILD_BUTTON_PIC = "build_button/hex_pic"
+local BUILD_BUTTON_WOOD_TXT = "build_button/wood_cost"
+local BUILD_BUTTON_STONE_TXT = "build_button/stone_cost"
 
 local function render_button(self, button_url, message_id)
 	local button = gui.get_node(button_url)
@@ -46,21 +43,37 @@ local function render_build(self, options)
 	local x = 300
 	local y = -300
 	gui.set_enabled(gui.get_node(BUILD_FIELD), true)
-	if options.farm ~= nil then
-		render_button(self, BUILD_FARM_BUTTON, options.farm)
-		gui.set_position(self.active_buttons[options.farm], vmath.vector3(x, y, 0))
+	for option, callback in pairs(options) do
+		local clones = gui.clone_tree(gui.get_node(BUILD_BUTTON_BOX))
+		gui.set_enabled(clones[BUILD_BUTTON_BOX], true)
+		gui.set_position(clones[BUILD_BUTTON_BOX], vmath.vector3(x, y, 0))
+		self.active_buttons[callback] = clones[BUILD_BUTTON_BOX]
+		self.build_buttons[callback] = clones[BUILD_BUTTON_BOX]
+		gui.play_flipbook(clones[BUILD_BUTTON_PIC], option)
 		x = x + BUILD_BUTTON_X_STEP
 	end
-	if options.sawmill ~= nil then
-		render_button(self, BUILD_SAWMILL_BUTTON, options.sawmill)
-		gui.set_position(self.active_buttons[options.sawmill], vmath.vector3(x, y, 0))
-		x = x + BUILD_BUTTON_X_STEP
+end
+
+local function erase_build(self)
+	gui.set_enabled(gui.get_node(BUILD_FIELD), false)
+	for option, clone_base in pairs(self.build_buttons) do
+		gui.delete_node(clone_base)
 	end
+	self.build_buttons = {}
+end
+
+local function clear_gui(self)
+	for message_id, button in pairs(self.active_buttons) do
+		gui.set_enabled(button, false)
+		self.active_buttons[message_id] = nil
+	end
+	erase_build(self)
 end
 
 function init(self)
 	msg.post(".", "acquire_input_focus")
 	self.active_buttons = {}
+	self.build_buttons = {}
 end
 
 function on_message(self, message_id, message, sender)
@@ -75,6 +88,14 @@ function on_message(self, message_id, message, sender)
 		if message.build ~= nil then
 			render_build(self, message.build)
 		end
+	end
+	if message_id == hash("update_resources") then
+		local food = gui.get_node("food_res_txt")
+		gui.set_text(food, "Food: " .. message.food)
+		local wood = gui.get_node("wood_res_txt")
+		gui.set_text(wood, "Wood: " .. message.wood)
+		local stone = gui.get_node("stone_res_txt")
+		gui.set_text(stone, "Stone: " .. message.stone)
 	end
 end
 

@@ -1,354 +1,131 @@
-TILE_WIDTH = 32
-TILE_HEIGHT = 48
-PLAY_ZONE_PADDING = 10
-SCREEN_WIDTH = 1920
-GUI_PLAY_ZONE_WIDTH = 1300
-GUI_PLAY_ZONE_HEIGHT = 1080
-PLAY_ZONE_WIDTH = GUI_PLAY_ZONE_WIDTH - PLAY_ZONE_PADDING * 2
-PLAY_ZONE_HEIGHT = GUI_PLAY_ZONE_HEIGHT - PLAY_ZONE_PADDING * 2
-X_SCALED_OFFSET = 0
-Y_SCALED_OFFSET = TILE_HEIGHT / 6
-X_OFFSET = 0
-Y_OFFSET = 0
-Z_SCALE = -0.001
-UNIX_OFFSET = 0
-UNIT_X_SCALED_OFFSET = 0
-UNIT_Y_SCALED_OFFSET = TILE_HEIGHT / 6
+local Map = require "main/game/map"
+local Landscape = require "main/game/landscape"
+local Building = require "main/game/building"
 
-local camera = require "orthographic.camera"
-
-function world_to_tile(self, v)
-	ox = ((v.x - X_OFFSET) / self.scale - X_SCALED_OFFSET) / TILE_WIDTH * 2
-	oy = ((v.y - Y_OFFSET) / self.scale - Y_SCALED_OFFSET) / TILE_HEIGHT * 2
-	tx = math.floor(ox)
-	ty = math.floor(oy)
-	x = ox - tx
-	y = oy - ty
-	if (tx + ty) % 2 == 0 then
-		if x + 3 * y > 1 then
-			tx = tx + 1
-			ty = ty + 1
-		end
-	else
-		if -x + 3 * y > 0 then
-			ty = ty + 1
-		else
-			tx = tx + 1
-		end
+local function normalize_resources(self, resources)
+	local norm = {
+		food = 0,
+		wood = 0,
+		stone = 0
+	}
+	if resources == nil then
+		return norm
 	end
-	return tx, ty
+	if resources.food ~= nil then
+		norm.food = resources.food
+	end
+	if resources.wood ~= nil then
+		norm.wood = resources.wood
+	end
+	if resources.stone ~= nil then
+		norm.stone = resources.stone
+	end
+	return norm
 end
 
-function tile_to_world(self, x, y)
-	return vmath.vector3(
-	(x * TILE_WIDTH / 2 + X_SCALED_OFFSET) * self.scale + X_OFFSET,
-	(y * TILE_HEIGHT / 2 + Y_SCALED_OFFSET) * self.scale + Y_OFFSET,
-	y * Z_SCALE
-	)
-end
-
-function unit_to_world(self, x, y)
-	return vmath.vector3(
-	(x * TILE_WIDTH / 2 + UNIT_X_SCALED_OFFSET) * self.scale + X_OFFSET,
-	(y * TILE_HEIGHT / 2 + UNIT_Y_SCALED_OFFSET) * self.scale + Y_OFFSET,
-	0)
-end
-
-function map_update_tile(self, x, y)
-	if self.map[x][y].visible then
-		if self.map[x][y].tile_id == nil then
-			self.map[x][y].tile_id = factory.create("#hex_factory", tile_to_world(self, x, y), nil, nil, self.scale)
-		end
-	else
-		if self.map[x][y].tile_id ~= nil then
-			go.delete(self.map[x][y].tile_id)
-			self.map[x][y].tile_id = nil
-		end
-		return
-	end
-	if self.map[x][y].unit ~= nil then
-		if self.map[x][y].unit_id == nil then
-			self.map[x][y].unit_id = factory.create("#unit_factory", unit_to_world(self, x, y), nil, nil, self.scale)
-		end
-	else
-		if self.map[x][y].unit_id ~= nil then
-			go.delete(self.map[x][y].unit_id)
-			self.map[x][y].unit_id = nil
-		end
-	end
-	local pic = self.map[x][y].landscape.name
-	if self.map[x][y].building.type ~= nil then
-		pic = self.map[x][y].building.type.name
-	end
-	if self.map[x][y].lighted == false then
-		msg.post(self.map[x][y].tile_id, "play_animation", {id = hash(pic .. "_grey")})
-		if self.map[x][y].unit ~= nil then
-			--msg.post(self.map[x][y].unit_id, "play_animation", {id = hash(self.map[x][y].unit.name .. "_grey")})
-		end
-	elseif self.map[x][y].building.type ~= nil and self.map[x][y].building.active == false then
-		msg.post(self.map[x][y].tile_id, "play_animation", {id = hash(pic .. "_off")})
-	else
-		msg.post(self.map[x][y].tile_id, "play_animation", {id = hash(pic)})
-	end
-	go.animate(self.map[x][y].tile_id, "scale", go.PLAYBACK_ONCE_FORWARD, self.scale, go.EASING_OUTBOUNCE, 1)
-	go.animate(self.map[x][y].tile_id, "position", go.PLAYBACK_ONCE_FORWARD, tile_to_world(self, x, y), go.EASING_OUTBOUNCE, 1)
-	if self.map[x][y].unit_id ~= nil then
-		go.animate(self.map[x][y].unit_id, "scale", go.PLAYBACK_ONCE_FORWARD, self.scale, go.EASING_OUTBOUNCE, 1)
-		go.animate(self.map[x][y].unit_id, "position", go.PLAYBACK_ONCE_FORWARD, unit_to_world(self, x, y), go.EASING_OUTBOUNCE, 1)
-	end
-	-- go.set(self.map[x][y].id, "scale", self.scale)
-	-- go.set(self.map[x][y].id, "position", tile_to_world(self, x, y))
-end
-
-function map_update(self)
-	for r = 0, MAP_RADIUS do
-		for x, y in circle_coordinates(r) do
-			map_update_tile(self, x, y)
-		end
-	end
-end
-
-function map_set_radius(self, r)
-	self.radius = r
-	self.scale = math.min(PLAY_ZONE_WIDTH / TILE_WIDTH / (2 * r + 1), PLAY_ZONE_HEIGHT / TILE_WIDTH / (1.5 * r + 1))
-	map_update(self)
-end
-
-MAP_RADIUS = 4
-
-local Unit = {
-	workers = {
-		name = "workers"
-	},
-	barbarians = {
-		name = "barbarians"
-	},
-}
-
-local Landscape = {
-	barren = {
-		name = "barren",
-	},
-	wheat = {
-		name = "wheat",
-	},
-	forest = {
-		name = "forest",
-	},
-	stone = {
-		name = "stone",
-	},
-}
-
-local Building = {
-	house = {
-		name = "house",
-		cost = {
-			wood = 4
-		},
-		repair = {
-			wood = 2
-		},
-	},
-	farm = {
-		name = "farm",
-		production = {
-			food = 1
-		},
-		cost = {
-			wood = 4
-		},
-		repair = {
-			wood = 2
-		},
-		require = {
-			landscape = {
-				Landscape.wheat.name,
-			}
-		}
-	},
-	sawmill = {
-		name = "sawmill",
-		production = {
-			wood = 1
-		},
-		cost = {
-			wood = 4
-		},
-		repair = {
-			wood = 2
-		},
-		require = {
-			landscape = {
-				Landscape.forest.name,
-			}
-		}
-	},
-	quarry = {
-		name = "quarry",
-		production = {
-			stone = 1
-		},
-		cost = {
-			wood = 4
-		},
-		repair = {
-			wood = 2
-		},
-		require = {
-			landscape = {
-				Landscape.stone.name,
-			}
-		}
-	},
-}
-
-function circle_coordinates_generator(r)
-	if r == 0 then
-		coroutine.yield(0, 0)
-	elseif r > 0 then
-		for i = 0, r - 1 do
-			coroutine.yield(-2 * r + i, i)
-			coroutine.yield(-r + 2 * i, r)
-			coroutine.yield(r + i, r - i)
-			coroutine.yield(2 * r - i, -i)
-			coroutine.yield(r - 2 * i, -r)
-			coroutine.yield(-r - i, -r + i)
-		end
-	end
-end
-
-function circle_coordinates(r)
-	return coroutine.wrap(function() circle_coordinates_generator(r) end)
-end
-
-function generate_tile(self, x, y)
-	self.map[x][y] = {
-		tile_id = factory.create("#hex_factory", tile_to_world(self, x, y), nil, nil, self.scale),
-		unit_id = nil,
-		visible = false,
-		ligted = true,
-		landscape = Landscape.wheat,
-		building = {
-			type = nil,
-			destroyed = false,
-			active = false,
-		},
-		unit = nil
+local function invert_resources(self, resources)
+	return {
+		food = -resources.food,
+		wood = -resources.wood,
+		stone = -resources.stone
 	}
 end
 
-function generate_circle(self, r)
-	for x, y in circle_coordinates(r) do
-		generate_tile(self, x, y)
+local function update_resources(self, resources)
+	norm = normalize_resources(self, resources)
+	self.resources.food = self.resources.food + norm.food
+	self.resources.wood = self.resources.wood + norm.wood
+	self.resources.stone = self.resources.stone + norm.stone
+	msg.post("gui", hash("update_resources"), self.resources)
+end
+
+local function spend_resources(self, resources)
+	norm = normalize_resources(self, resources)
+	inv = invert_resources(self, norm)
+	update_resources(self, inv)
+end
+
+local function check_cost(self, resources)
+	norm = normalize_resources(self, resources)
+	if norm.food > self.resources.food then
+		return false
 	end
-end
-
-function generate_map(self)
-	self.map = {}
-	for i = -MAP_RADIUS * 2, MAP_RADIUS * 2 do
-		self.map[i] = {}
+	if norm.wood > self.resources.wood then
+		return false
 	end
-	for r = 0, MAP_RADIUS do
-		generate_circle(self, r)
+	if norm.stone > self.resources.stone then
+		return false
 	end
+	return true
 end
 
-function show_tile(self, x, y)
-	self.map[x][y].visible = true
-	map_update_tile(self, x, y)
+local function lose_game(self)
+	print("you lose")
 end
 
-function show_circle(self, r)
-	for x, y in circle_coordinates(r) do
-		show_tile(self, x, y)
-	end
-end
-
-function hide_tile(self, x, y)
-	self.map[x][y].visible = false
-	map_update_tile(self, x, y)
-end
-
-function hide_circle(self, r)
-	for x, y in circle_coordinates(r) do
-		hide_tile(self, x, y)
-	end
-end
-
-function set_tile_active(self, x, y, active)
-	self.map[x][y].lighted = active
-end
-	
-
-function active_filter(self, is_active)
-	for r = 0, MAP_RADIUS do
-		for x, y in circle_coordinates(r) do
-			set_tile_active(self, x, y, is_active(self, x, y))
-		end
-	end
-	map_update(self)
-end
-
-function worker_move(self, x, y, tx, ty)
-	self.map[x][y].unit = Unit.none
-	self.map[tx][ty].unit = Unit.workers
-	map_update(self)
-	-- TODO animation and everything else
-end
-
-local function build(self, x, y, building)
-	self.map[x][y].building.type = building
-	map_update(self)
-	-- TODO animation and everything else
-end
-
-function spawn_unit(self, x, y, unit)
-	self.map[x][y].unit = unit
-	map_update_tile(self, x, y)
-end
-
-function get_radius(x, y)
-	return (math.abs(x) + math.abs(y)) / 2
-end
-
-function get_distance(x, y, tx, ty)
-	return math.max(math.abs(tx - x) / 2, math.abs(ty - y))
-end
-
-function enemy_turn(self)
-
-	-- TEST PART
-	if self.radius == 2 then
-		show_circle(self, 3)
-		map_set_radius(self, 3)
-	elseif self.radius == 3 then
-		show_circle(self, 4)
-		map_set_radius(self, 4)
-	elseif self.radius == 4 then
-		hide_circle(self, 3)
-		hide_circle(self, 4)
-		map_set_radius(self, 2)
-	end
-	-- END TEST PART
-end
-
-local function get_build_options(self, x, y)
-	options = {}
-	for _, building in pairs(Building) do
-		if building.require ~= nil and building.require.landscape ~= nil then
-			local landscape_require = false
-			for _, landscape in pairs(building.require.landscape) do
-				if landscape == self.map[x][y].landscape.name then
-					landscape_require = true
+local function enemy_turn(self)
+	for barbarian_hex in Map.iterate() do
+		if barbarian_hex.unit ~= nil and barbarian_hex.unit.type == "barbarians" and barbarian_hex.unit.action then
+			if barbarian_hex.x == 0 and barbarian_hex.y == 0 then
+				lose_game(self)
+				break
+			end
+			local hex_priority = {}
+			for hex in Map.iterate() do
+				hex_priority[hex] = 0
+			end
+			for hex in Map.iterate() do
+				if hex.visible and (hex.unit == nil or hex.unit.type == "workers") then
+					local priority = 0
+					if hex.building ~= nil then
+						priority = priority + hex.building.importance
+					end
+					if hex.unit ~= nil and hex.unit.type == "workers" then
+						priority = priority + 4
+					end
+					for other_hex in Map.iterate() do
+						hex_priority[other_hex] = hex_priority[other_hex] + priority / (Map.distance(hex, other_hex) + 1)
+					end
 				end
 			end
-			if landscape_require then
-				options[building.name] = hash(building.name)
+			local max_priority = -1
+			local candidates = {}
+			local candidates_l = 0
+			for hex in Map.iterate() do
+				if hex.visible and (hex.unit == nil or hex.unit.type == 'workers') and Map.distance(hex, barbarian_hex) == 1 then
+					if hex_priority[hex] > max_priority then
+						candidates = {}
+						max_priority = hex_priority[hex]
+						table.insert(candidates, hex)
+						candidates_l = 1
+					elseif hex_priority[hex] == max_priority then
+						table.insert(candidates, hex)
+						candidates_l = candidates_l + 1
+					end
+				end
+			end
+			if candidates_l > 0 then
+				local hex = candidates[math.random(candidates_l)]
+				if hex.unit ~= nil then
+					-- TODO
+					Map.unit_destroy(hex)
+				end
+				Map.unit_move(barbarian_hex, hex)
+				hex.unit.action = false
+			else
+				barbarian_hex.unit.action = false
 			end
 		end
 	end
-	return options
+
+	for hex in Map.iterate() do
+		if hex.unit ~= nil then
+			hex.unit.action = true
+		end
+		if hex.building ~= nil and hex.building_active  then
+			update_resources(self, hex.building.production)
+		end
+	end
 end
 
 local function ChangeState(self, state)
@@ -366,7 +143,6 @@ local function ChangeState(self, state)
 	if self.state.init ~= nil then
 		self.state.init(self)
 	end
-	map_update(self)
 end
 
 local TILE_CLICK_MSG = hash("tile_click")
@@ -374,18 +150,27 @@ local END_TURN_CLICK_MSG = hash("end_turn_click")
 local MOVE_ACTION_CLICK_MSG = hash("move_action_click")
 local BUILD_ACTION_CLICK_MSG = hash("build_action_click")
 local BACK_CLICK_MSG = hash("back_click")
-local FARM_BUILD_CLICK_MSG = hash("farm_build_click")
-local SAWMILL_BUILD_CLICK_MSG = hash("sawmill_build_click")
 
 local GameState = {
-	None = nil,
+	Init = nil,
 	Free = nil,
 	WorkerAction = nil,
 	WorkerBuild = nil,
 	EnemyTurn = nil,
 }
 
-GameState.None = function(self)
+GameState.Init = function(self)
+	self.resources = {
+		food = 0,
+		wood = 8,
+		stone = 0
+	}
+	update_resources(self, {})
+	Map.set_radius(2)
+	Map.generate()
+	self.focus = nil
+	msg.post("camera", "use_projection", { projection = hash("FIXED_AUTO") })
+	msg.post(".", "acquire_input_focus")
 	return {}
 end
 
@@ -396,9 +181,11 @@ GameState.Free = function(self)
 		},
 		message_handler = {
 			[TILE_CLICK_MSG] = function(self, message)
-				if self.map[message.x][message.y].unit == Unit.workers then
-					self.focus.x = message.x
-					self.focus.y = message.y
+				local hex = Map.coordinates_to_hex[message.x][message.y]
+				if hex.unit ~= nil and
+				hex.unit.type == "workers" and 
+				hex.unit.action then
+					self.focus = hex
 					ChangeState(self, GameState.WorkerAction)
 				end
 			end,
@@ -410,51 +197,61 @@ GameState.Free = function(self)
 end
 
 GameState.WorkerAction = function(self)
-	return {
-		gui = {
-			end_turn = END_TURN_CLICK_MSG,
-			action = {
-				move = MOVE_ACTION_CLICK_MSG,
-				build = BUILD_ACTION_CLICK_MSG,
-				back = BACK_CLICK_MSG
-			}
-		},
-		message_handler = {
-			[TILE_CLICK_MSG] = function(self, message)
-				if self.map[message.x][message.y].unit == Unit.workers then
-					self.focus.x = message.x
-					self.focus.y = message.y
-					ChangeState(self, GameState.WorkerAction)
-				else
-					ChangeState(self, GameState.Free)
-				end
-			end,
-			[MOVE_ACTION_CLICK_MSG] = function(self, message)
-				ChangeState(self, GameState.WorkerMove)
-			end,
-			[BUILD_ACTION_CLICK_MSG] = function(self, message)
-				ChangeState(self, GameState.WorkerBuild)
-			end,
-			[BACK_CLICK_MSG] = function(self, message)
-				ChangeState(self, GameState.Free)
-			end,
-			[END_TURN_CLICK_MSG] = function(self, message)
-				ChangeState(self, GameState.EnemyTurn)
-			end,
+	local gui = {
+		end_turn = END_TURN_CLICK_MSG,
+		action = {
+			move = MOVE_ACTION_CLICK_MSG,
+			build = BUILD_ACTION_CLICK_MSG,
+			back = BACK_CLICK_MSG
 		}
+	}
+	local message_handler = {
+		[TILE_CLICK_MSG] = function(self, message)
+			local hex = Map.coordinates_to_hex[message.x][message.y]
+			if hex.unit ~= nil and hex.unit.type == "workers" then
+				self.focus = hex
+				ChangeState(self, GameState.WorkerAction)
+			else
+				self.focus = nil
+				ChangeState(self, GameState.Free)
+			end
+		end,
+		[MOVE_ACTION_CLICK_MSG] = function(self, message)
+			ChangeState(self, GameState.WorkerMove)
+		end,
+		[BACK_CLICK_MSG] = function(self, message)
+			ChangeState(self, GameState.Free)
+		end,
+		[BUILD_ACTION_CLICK_MSG] = function(self, message)
+			ChangeState(self, GameState.WorkerBuild)
+		end,
+		[END_TURN_CLICK_MSG] = function(self, message)
+			ChangeState(self, GameState.EnemyTurn)
+		end,
+	}
+
+	--TODO потом возможно забабахать тут отдельно кнопку для апгрейдов, а пока так пусть будет
+	
+	return {
+		gui = gui,
+		message_handler = message_handler
 	}
 end
 
 GameState.WorkerMove = function(self)
+	local function is_move_option(self, hex)
+		return Map.distance(self.focus, hex) == 1 and hex.unit == nil
+	end
 	return {
 		init = function(self)
-			-- TEST
-			active_filter(self, function(self, tx, ty)
-				return not (get_distance(self.focus.x, self.focus.y, tx, ty) == 1 and self.map[tx][ty].visible == true)
-			end)
+			for hex in Map.iterate() do
+				hex.highlighted = is_move_option(self, hex)
+			end
 		end,
 		destroy = function(self)
-			active_filter(self, function(self, x, y) return true end)
+			for hex in Map.iterate() do
+				hex.highlighted = false
+			end
 		end,
 		gui = {
 			action = {
@@ -463,8 +260,10 @@ GameState.WorkerMove = function(self)
 		},
 		message_handler = {
 			[TILE_CLICK_MSG] = function(self, message)
-				if not self.map[message.x][message.y].lighted then
-					worker_move(self, self.focus.x, self.focus.y, message.x, message.y)
+				local target = Map.coordinates_to_hex[message.x][message.y]
+				if is_move_option(self, target) then
+					self.focus.unit.action = false
+					Map.unit_move(self.focus, target)
 					ChangeState(self, GameState.Free)
 				end
 			end,
@@ -476,24 +275,44 @@ GameState.WorkerMove = function(self)
 end
 
 GameState.WorkerBuild = function(self)
-	message_handler = {
+	local gui = {
+		action = {
+			back = BACK_CLICK_MSG
+		},
+		build = {}
+	}
+	local message_handler = {
 		[BACK_CLICK_MSG] = function(self, message)
-				ChangeState(self, GameState.WorkerAction)
-			end,
-		}
-	for option, h in pairs(get_build_options(self, self.focus.x, self.focus.y)) do
-		message_handler[h] = function(self, message)
-			build(self, self.focus.x, self.focus.y, Building[option])
-			ChangeState(self, GameState.Free)
+			ChangeState(self, GameState.WorkerAction)
+		end,
+	}
+	local options
+	if self.focus.building == nil then
+		options = self.focus.landscape.build_options
+	else
+		options = self.focus.building.build_options
+	end
+	if options ~= nil then
+		for _, option in pairs(options) do
+			gui.build[option] = hash(option)
+			message_handler[hash(option)] = function(self, message)
+				if check_cost(self, Building[option].cost) then
+					spend_resources(self, Building[option].cost)
+					self.focus.unit.action = false
+					self.focus.building = Building[option]
+					-- DEBUG !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+					self.focus.building_active = true
+					-- DEBUG !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+					self.focus = nil
+					ChangeState(self, GameState.Free)
+				else
+					print("resources requirements are not satisfied")
+				end
+			end
 		end
 	end
 	return {
-		gui = {
-			action = {
-				back = BACK_CLICK_MSG
-			},
-			build = get_build_options(self, self.focus.x, self.focus.y)
-		},
+		gui = gui,
 		message_handler = message_handler
 	}
 end
@@ -509,18 +328,12 @@ GameState.EnemyTurn = function(self)
 end
 
 function init(self)
-	self.scale = 1
-	generate_map(self)
-	map_set_radius(self, 2)
-	show_circle(self, 0)
-	show_circle(self, 1)
-	show_circle(self, 2)
-	spawn_unit(self, 0, 0, Unit.workers)
-	self.focus = {}
-	self.state = GameState.None(self)
+	self.state = GameState.Init(self)
 	ChangeState(self, GameState.Free)
-	msg.post("camera", "use_projection", { projection = hash("FIXED_AUTO") })
-	msg.post(".", "acquire_input_focus")
+end
+
+function update(self, dt)
+	Map.update()
 end
 
 function on_message(self, message_id, message, sender)
@@ -531,10 +344,9 @@ end
 
 function on_input(self, action_id, action)
 	if action_id == hash("touch") and action.released then
-		local v = camera.screen_to_world(nil, vmath.vector3(action.x, action.y, 0))
-		local x, y = world_to_tile(self, v)
-		if self.map[x] ~= nil and self.map[x][y] ~= nil and self.map[x][y].tile_id ~= nil then
-			msg.post(".", TILE_CLICK_MSG, {x = x, y = y})
+		local hex = Map.screen_to_hex(action.x, action.y)
+		if hex ~= nil and hex.visible then
+			msg.post(".", TILE_CLICK_MSG, {x = hex.x, y = hex.y})
 		end
 	end
 end
