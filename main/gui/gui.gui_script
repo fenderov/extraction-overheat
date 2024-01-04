@@ -5,9 +5,6 @@ local ACTION_BUTTON_Y_STEP = -200
 local BUILD_BUTTON_X_STEP = 300
 local END_TURN_BUTTON = "end_turn/base"
 local BUILD_FIELD = "build_box"
-local BUILD_FARM_BUTTON = "farm/button/base"
-local BUILD_SAWMILL_BUTTON = "sawmill/button/base"
-local FOOD_TXT = "sawmill/button/base"
 local BUILD_BUTTON_BOX = "build_button/box"
 local BUILD_BUTTON_PIC = "build_button/hex_pic"
 local BUILD_BUTTON_WOOD_TXT = "build_button/wood_cost"
@@ -43,14 +40,18 @@ local function render_build(self, options)
 	local x = 300
 	local y = -300
 	gui.set_enabled(gui.get_node(BUILD_FIELD), true)
-	for option, callback in pairs(options) do
+	for option, cost in pairs(options) do
 		local clones = gui.clone_tree(gui.get_node(BUILD_BUTTON_BOX))
 		gui.set_enabled(clones[BUILD_BUTTON_BOX], true)
 		gui.set_position(clones[BUILD_BUTTON_BOX], vmath.vector3(x, y, 0))
-		self.active_buttons[callback] = clones[BUILD_BUTTON_BOX]
-		self.build_buttons[callback] = clones[BUILD_BUTTON_BOX]
+		self.active_buttons[hash(option)] = clones[BUILD_BUTTON_BOX]
+		self.build_buttons[hash(option)] = clones[BUILD_BUTTON_BOX]
 		gui.play_flipbook(clones[BUILD_BUTTON_PIC], option)
 		x = x + BUILD_BUTTON_X_STEP
+		local wood = clones[BUILD_BUTTON_WOOD_TXT]
+		gui.set_text(wood, "Wood: " .. cost.wood)
+		local stone = clones[BUILD_BUTTON_STONE_TXT]
+		gui.set_text(stone, "Stone: " .. cost.stone)
 	end
 end
 

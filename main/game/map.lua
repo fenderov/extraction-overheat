@@ -16,6 +16,8 @@ local Y_OFFSET = 0
 local Z_SCALE = -0.001
 local UNIT_X_SCALED_OFFSET = 0
 local UNIT_Y_SCALED_OFFSET = TILE_HEIGHT / 6
+local ARMOR_X_SCALED_OFFSET = 0
+local ARMOR_Y_SCALED_OFFSET = -TILE_HEIGHT / 6
 
 local camera = require "orthographic.camera"
 
@@ -102,6 +104,13 @@ local function hex_to_world(x, y)
 )
 end
 
+local function armor_to_world(x, y)
+	return vmath.vector3(
+	(x * TILE_WIDTH / 2 + ARMOR_X_SCALED_OFFSET) * scale + X_OFFSET,
+	(y * TILE_HEIGHT / 2 + ARMOR_Y_SCALED_OFFSET) * scale + Y_OFFSET,
+	0)
+end
+
 local function unit_to_world(x, y)
 	return vmath.vector3(
 	(x * TILE_WIDTH / 2 + UNIT_X_SCALED_OFFSET) * scale + X_OFFSET,
@@ -129,6 +138,35 @@ function Map.set_radius(r)
 			go.animate(hex.unit.id, "scale", go.PLAYBACK_ONCE_FORWARD, scale, go.EASING_OUTBOUNCE, 1)
 			go.animate(hex.unit.id, "position", go.PLAYBACK_ONCE_FORWARD, unit_to_world(hex.x, hex.y), go.EASING_OUTBOUNCE, 1)
 		end
+		if hex.armor ~= 0 then
+			go.animate(hex.armor_id, "scale", go.PLAYBACK_ONCE_FORWARD, scale, go.EASING_OUTBOUNCE, 1)
+			go.animate(hex.armor_id, "position", go.PLAYBACK_ONCE_FORWARD, armor_to_world(hex.x, hex.y), go.EASING_OUTBOUNCE, 1)
+		end
+	end
+end
+
+local function recalculate_light()
+	for hex in Map.iterate() do
+		hex.light = 0
+		if hex.building ~= nil then
+			if hex.building_active then
+				hex.light = hex.building.light_on
+			else
+				hex.light = hex.building.light_off
+			end
+		end
+		if hex.unit ~= nil and hex.unit.type == "workers" then
+			hex.light = 3
+		end
+	end
+	for i = 1, 3 do
+		for hex in Map.iterate() do
+			for other_hex in Map.iterate() do
+				if Map.distance(hex, other_hex) == 1 then
+					hex.light = math.max(hex.light, other_hex.light - 1)
+				end
+			end
+		end
 	end
 end
 
@@ -146,7 +184,10 @@ function Map.generate()
 			landscape = Landscape.wheat,
 			building = nil,
 			building_active = false,
-			unit = nil
+			unit = nil,
+			armor = 0,
+			armor_id = factory.create("#armor_factory", armor_to_world(x, y), nil, nil, scale),
+			light = 0
 		}
 		hexes[Map.coordinates_to_hex[x][y]] = true
 	end
@@ -163,6 +204,7 @@ function Map.generate()
 	end
 	Map.unit_spawn(Map.coordinates_to_hex[0][0], "workers")
 	Map.unit_spawn(Map.coordinates_to_hex[2][2], "barbarians")
+	-- Map.building_set(Map.coordinates_to_hex[0][0], Building.center)
 end
 
 function Map.distance(hex1, hex2)
@@ -192,7 +234,22 @@ function Map.unit_destroy(hex)
 	hex.unit = nil
 end
 
+function Map.building_set(hex, building)
+	hex.building = building
+	-- DEBUG !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+	hex.building_active = true
+	-- DEBUG !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+	if building.armor ~= nil then
+		hex.armor = building.armor
+	end
+end
+
+function Map.building_destroy(hex)
+	hex.building = nil
+end
+
 function Map.update()
+	recalculate_light()
 	for hex in Map.iterate() do
 		if hex.visible then
 			msg.post(hex.id, "enable")
@@ -216,11 +273,19 @@ function Map.update()
 				end
 				msg.post(hex.unit.id, "play_animation", {id = hash(pic)})
 			end
+
+			if hex.armor ~= 0 then
+				msg.post(hex.armor_id, "enable")
+				msg.post(hex.armor_id, "play_animation", {id = hash("armor" .. tostring(hex.armor))})
+			else
+				msg.post(hex.armor_id, "disable")
+			end
 		else
 			msg.post(hex.id, "disable")
 			if hex.unit ~= nil then
 				msg.post(hex.unit.id, "disable")
 			end
+			msg.post(hex.armor_id, "disable")
 		end
 	end
 end

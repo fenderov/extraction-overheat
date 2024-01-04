@@ -3,6 +3,7 @@ local Landscape = {
 		name = "barren",
 		build_options = {
 			"house",
+			"fortress",
 		}
 	},
 	wheat = {
@@ -10,6 +11,7 @@ local Landscape = {
 		build_options = {
 			"house",
 			"farm",
+			"fortress",
 		}
 	},
 	forest = {
@@ -17,6 +19,7 @@ local Landscape = {
 		build_options = {
 			"house",
 			"sawmill",
+			"fortress",
 		}
 	},
 	stone = {
@@ -24,6 +27,7 @@ local Landscape = {
 		build_options = {
 			"house",
 			"quarry",
+			"fortress",
 		}
 	},
 }

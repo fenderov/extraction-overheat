@@ -1,0 +1,3 @@
+prototype: "/main/game/armor/armor.go"
+load_dynamically: false
+dynamic_prototype: false

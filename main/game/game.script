@@ -64,56 +64,104 @@ local function lose_game(self)
 end
 
 local function enemy_turn(self)
+
+	-- TODO переписать тут всё под освещение
+
 	for barbarian_hex in Map.iterate() do
-		if barbarian_hex.unit ~= nil and barbarian_hex.unit.type == "barbarians" and barbarian_hex.unit.action then
-			if barbarian_hex.x == 0 and barbarian_hex.y == 0 then
-				lose_game(self)
-				break
-			end
-			local hex_priority = {}
-			for hex in Map.iterate() do
-				hex_priority[hex] = 0
-			end
-			for hex in Map.iterate() do
-				if hex.visible and (hex.unit == nil or hex.unit.type == "workers") then
-					local priority = 0
-					if hex.building ~= nil then
-						priority = priority + hex.building.importance
-					end
-					if hex.unit ~= nil and hex.unit.type == "workers" then
-						priority = priority + 4
-					end
-					for other_hex in Map.iterate() do
-						hex_priority[other_hex] = hex_priority[other_hex] + priority / (Map.distance(hex, other_hex) + 1)
+		if barbarian_hex.unit ~= nil and barbarian_hex.unit.action then
+			if barbarian_hex.unit.type == "barbarians" then
+				local hex_priority = {}
+				for hex in Map.iterate() do
+					hex_priority[hex] = 0
+				end
+				for hex in Map.iterate() do
+					if hex.visible then
+						local priority = 0
+						if hex.building ~= nil then
+							priority = priority + hex.building.importance
+						end
+						if hex.unit ~= nil and hex.unit.type == "workers" then
+							priority = priority + 4
+						end
+						for other_hex in Map.iterate() do
+							hex_priority[other_hex] = hex_priority[other_hex] + priority / (Map.distance(hex, other_hex) + 1)
+						end
 					end
 				end
-			end
-			local max_priority = -1
-			local candidates = {}
-			local candidates_l = 0
-			for hex in Map.iterate() do
-				if hex.visible and (hex.unit == nil or hex.unit.type == 'workers') and Map.distance(hex, barbarian_hex) == 1 then
-					if hex_priority[hex] > max_priority then
-						candidates = {}
-						max_priority = hex_priority[hex]
-						table.insert(candidates, hex)
-						candidates_l = 1
-					elseif hex_priority[hex] == max_priority then
-						table.insert(candidates, hex)
-						candidates_l = candidates_l + 1
+				local max_priority = -1
+				local candidates = {}
+				local candidates_l = 0
+				for hex in Map.iterate() do
+					if hex.visible and (
+					((hex.unit == nil or hex.unit.type == 'workers') and Map.distance(hex, barbarian_hex) == 1) or
+					(hex.building ~= nil and hex == barbarian_hex)
+					) and (hex.building ~= Building.fortress or hex.building_active == false) then
+						if hex_priority[hex] > max_priority then
+							candidates = {}
+							max_priority = hex_priority[hex]
+							table.insert(candidates, hex)
+							candidates_l = 1
+						elseif hex_priority[hex] == max_priority then
+							table.insert(candidates, hex)
+							candidates_l = candidates_l + 1
+						end
 					end
 				end
-			end
-			if candidates_l > 0 then
-				local hex = candidates[math.random(candidates_l)]
-				if hex.unit ~= nil then
-					-- TODO
-					Map.unit_destroy(hex)
+				if candidates_l > 0 then
+					local hex = candidates[math.random(candidates_l)]
+					if hex == barbarian_hex then
+						if hex.building == Building.center or hex.building == Building.center2 or hex.building == Building.center3 then
+							lose_game(self)
+						end
+						Map.building_destroy(hex)
+						hex.unit.action = false
+					else
+						if hex.armor > 0 then
+							hex.armor = hex.armor - 1
+						else
+							if hex.unit ~= nil then
+								barbarian_hex.unit.type = "barbarians_capture"
+								Map.unit_destroy(hex)
+							end
+							Map.unit_move(barbarian_hex, hex)
+							hex.unit.action = false
+						end
+					end
+				else
+					barbarian_hex.unit.action = false
 				end
-				Map.unit_move(barbarian_hex, hex)
-				hex.unit.action = false
-			else
-				barbarian_hex.unit.action = false
+			elseif barbarian_hex.unit.type == "barbarians_capture" then
+				local max_priority = -1
+				local candidates = {}
+				local candidates_l = 0
+				for hex in Map.iterate() do
+					if hex.unit == nil and Map.distance(hex, barbarian_hex) == 1  then
+						local priority = Map.get_radius(hex)
+						if priority > max_priority then
+							candidates = {}
+							max_priority = priority
+							table.insert(candidates, hex)
+							candidates_l = 1
+						elseif priority == max_priority then
+							table.insert(candidates, hex)
+							candidates_l = candidates_l + 1
+						end
+					end
+				end
+				if candidates_l > 0 then
+					local hex = candidates[math.random(candidates_l)]
+					if hex.armor > 0 then
+						hex.armor = hex.armor - 1
+					else
+						Map.unit_move(barbarian_hex, hex)
+						hex.unit.action = false
+						if hex.visible == false then
+							Map.unit_destroy(hex)
+						end
+					end
+				else
+					barbarian_hex.unit.action = false
+				end
 			end
 		end
 	end
@@ -163,7 +211,7 @@ GameState.Init = function(self)
 	self.resources = {
 		food = 0,
 		wood = 8,
-		stone = 0
+		stone = 10
 	}
 	update_resources(self, {})
 	Map.set_radius(2)
@@ -294,15 +342,12 @@ GameState.WorkerBuild = function(self)
 	end
 	if options ~= nil then
 		for _, option in pairs(options) do
-			gui.build[option] = hash(option)
+			gui.build[option] = normalize_resources(self, Building[option].cost)
 			message_handler[hash(option)] = function(self, message)
 				if check_cost(self, Building[option].cost) then
 					spend_resources(self, Building[option].cost)
 					self.focus.unit.action = false
-					self.focus.building = Building[option]
-					-- DEBUG !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-					self.focus.building_active = true
-					-- DEBUG !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+					Map.building_set(self.focus, Building[option])
 					self.focus = nil
 					ChangeState(self, GameState.Free)
 				else

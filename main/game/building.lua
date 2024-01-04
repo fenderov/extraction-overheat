@@ -4,7 +4,9 @@ local Building = {
 		cost = {
 			wood = 4
 		},
-		importance = 1
+		importance = 1,
+		light_on = 2,
+		light_off = 2,
 	},
 	farm = {
 		name = "farm",
@@ -17,7 +19,9 @@ local Building = {
 		build_options = {
 			"sawmill"
 		},
-		importance = 1
+		importance = 1,
+		light_on = 3,
+		light_off = 2,
 	},
 	sawmill = {
 		name = "sawmill",
@@ -27,53 +31,30 @@ local Building = {
 		cost = {
 			wood = 4
 		},
-		importance = 1
-	},
-	quarry = {
-		name = "quarry",
-		production = {
-			stone = 1
-		},
-		cost = {
-			wood = 4
-		},
-		importance = 1
+		importance = 1,
+		light_on = 3,
+		light_off = 2,
 	},
 	center = {
 		name = "center",
 		production = {
 			food = 1,
-			wood = 1
+			wood = 1,
+			stone = 10
 		},
-		build_options = {
-			"center2"
-		},
-		importance = 2
+		importance = 2,
+		armor = 3,
+		light_on = 3,
+		light_off = 2,
 	},
-	center2 = {
-		name = "center2",
-		production = {
-			food = 1,
-			wood = 1
-		},
-		build_options = {
-			"center3"
-		},
+	fortress = {
+		name = "fortress",
 		cost = {
-			wood = 8
+			stone = 4
 		},
-		importance = 2
-	},
-	center3 = {
-		name = "center3",
-		production = {
-			food = 1,
-			wood = 1
-		},
-		cost = {
-			wood = 16
-		},
-		importance = 2
+		importance = 0,
+		light_on = 3,
+		light_off = 2,
 	}
 }
 
