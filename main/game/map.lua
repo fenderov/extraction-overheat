@@ -1,5 +1,6 @@
 local Landscape = require "main/game/landscape"
 local Building = require "main/game/building"
+local Unit = require "main/game/unit"
 
 local TILE_WIDTH = 32
 local TILE_HEIGHT = 48
@@ -104,13 +105,6 @@ local function hex_to_world(x, y)
 )
 end
 
-local function armor_to_world(x, y)
-	return vmath.vector3(
-	(x * TILE_WIDTH / 2 + ARMOR_X_SCALED_OFFSET) * scale + X_OFFSET,
-	(y * TILE_HEIGHT / 2 + ARMOR_Y_SCALED_OFFSET) * scale + Y_OFFSET,
-	0)
-end
-
 local function unit_to_world(x, y)
 	return vmath.vector3(
 	(x * TILE_WIDTH / 2 + UNIT_X_SCALED_OFFSET) * scale + X_OFFSET,
@@ -138,35 +132,6 @@ function Map.set_radius(r)
 			go.animate(hex.unit.id, "scale", go.PLAYBACK_ONCE_FORWARD, scale, go.EASING_OUTBOUNCE, 1)
 			go.animate(hex.unit.id, "position", go.PLAYBACK_ONCE_FORWARD, unit_to_world(hex.x, hex.y), go.EASING_OUTBOUNCE, 1)
 		end
-		if hex.armor ~= 0 then
-			go.animate(hex.armor_id, "scale", go.PLAYBACK_ONCE_FORWARD, scale, go.EASING_OUTBOUNCE, 1)
-			go.animate(hex.armor_id, "position", go.PLAYBACK_ONCE_FORWARD, armor_to_world(hex.x, hex.y), go.EASING_OUTBOUNCE, 1)
-		end
-	end
-end
-
-local function recalculate_light()
-	for hex in Map.iterate() do
-		hex.light = 0
-		if hex.building ~= nil then
-			if hex.building_active then
-				hex.light = hex.building.light_on
-			else
-				hex.light = hex.building.light_off
-			end
-		end
-		if hex.unit ~= nil and hex.unit.type == "workers" then
-			hex.light = 3
-		end
-	end
-	for i = 1, 3 do
-		for hex in Map.iterate() do
-			for other_hex in Map.iterate() do
-				if Map.distance(hex, other_hex) == 1 then
-					hex.light = math.max(hex.light, other_hex.light - 1)
-				end
-			end
-		end
 	end
 end
 
@@ -185,26 +150,33 @@ function Map.generate()
 			building = nil,
 			building_active = false,
 			unit = nil,
-			armor = 0,
-			armor_id = factory.create("#armor_factory", armor_to_world(x, y), nil, nil, scale),
-			light = 0
+			connected = false,
 		}
 		hexes[Map.coordinates_to_hex[x][y]] = true
 	end
 	for x, y in circle_coordinates(0) do
 		Map.coordinates_to_hex[x][y].visible = true
+		Map.coordinates_to_hex[x][y].landscape = Landscape.barren
 	end
 	for x, y in circle_coordinates(1) do
 		Map.coordinates_to_hex[x][y].visible = true
-		Map.coordinates_to_hex[x][y].landscape = Landscape.wheat
+		Map.coordinates_to_hex[x][y].landscape = Landscape.barren
 	end
 	for x, y in circle_coordinates(2) do
 		Map.coordinates_to_hex[x][y].visible = true
+		Map.coordinates_to_hex[x][y].landscape = Landscape.barren
+	end
+	for x, y in circle_coordinates(3) do
+		Map.coordinates_to_hex[x][y].visible = true
+		Map.coordinates_to_hex[x][y].landscape = Landscape.wheat
+	end
+	for x, y in circle_coordinates(4) do
+		Map.coordinates_to_hex[x][y].visible = true
 		Map.coordinates_to_hex[x][y].landscape = Landscape.forest
 	end
-	Map.unit_spawn(Map.coordinates_to_hex[0][0], "workers")
-	Map.unit_spawn(Map.coordinates_to_hex[2][2], "barbarians")
-	-- Map.building_set(Map.coordinates_to_hex[0][0], Building.center)
+	Map.building_set(Map.coordinates_to_hex[0][-4], Building.center, "ally")
+	Map.building_set(Map.coordinates_to_hex[0][4], Building.aztec_temple, "enemy")
+	Map.building_set(Map.coordinates_to_hex[3][1], Building.aztec_village, "enemy")
 end
 
 function Map.distance(hex1, hex2)
@@ -215,77 +187,186 @@ function Map.get_radius(hex)
 	return (math.abs(hex.x) + math.abs(hex.y)) / 2
 end
 
-function Map.unit_spawn(hex, type)
+function Map.unit_spawn(hex, type, team)
 	hex.unit = {
 		id = factory.create("#unit_factory", unit_to_world(hex.x, hex.y), nil, nil, scale),
 		type = type,
 		action = true,
+		health = type.health,
+		power = type.power,
+		team = team,
+		need_reload = false,
+		fast_action = true,
+		enemy_behaviour = "scout",
+		enemy_defender_anchor = nil,
 	}
 end
 
 function Map.unit_move(current, target)
+	if current.unit.type.feats.fast ~= nil and current.unit.fast_action then
+		current.unit.fast_action = false
+	else
+		current.unit.action = false
+	end
 	go.animate(current.unit.id, "position", go.PLAYBACK_ONCE_FORWARD, unit_to_world(target.x, target.y), go.EASING_INOUTSINE, 0.2)
 	target.unit = current.unit
 	current.unit = nil
 end
 
-function Map.unit_destroy(hex)
+function Map.unit_fight(current, target, resources)
+	current.unit.action = false	
+	target.unit.health = math.max(0, target.unit.health - current.unit.power)
+	if target.unit.health == 0 then
+		Map.unit_destroy(target, resources)
+		Map.unit_move(current, target)
+	else
+		go.animate(current.unit.id, "position", go.PLAYBACK_ONCE_PINGPONG, unit_to_world(target.x, target.y), go.EASING_INOUTSINE, 0.4)
+		go.animate(target.unit.id, "position", go.PLAYBACK_ONCE_PINGPONG, unit_to_world(current.x, current.y), go.EASING_INOUTSINE, 0.4)
+		current.unit.health = math.max(0, current.unit.health - target.unit.power)
+		if current.unit.health == 0 then
+			Map.unit_destroy(target, resources)
+		end
+	end
+end
+
+function Map.unit_shoot(current, target, resources)
+	current.unit.action = false
+	current.unit.need_reload = true
+	target.unit.health = math.max(0, target.unit.health - current.unit.power)
+	if target.unit.health == 0 then
+		Map.unit_destroy(target, resources)
+	end
+end
+
+function Map.unit_reload(current)
+	current.unit.action = false
+	current.unit.need_reload = false
+end
+
+function Map.unit_heal(current, target)
+	current.unit.action = false
+	target.unit.health = math.min(target.unit.type.health, target.unit.health + 1)
+end
+
+function Map.unit_destroy(hex, resources)
 	go.delete(hex.unit.id)
+	if hex.unit.team == "enemy" and hex.unit.enemy_behaviour == "defender" then
+		local i = hex.unit.enemy_defender_index
+		local x = hex.unit.enemy_defender_anchor_x
+		local y = hex.unit.enemy_defender_anchor_y
+		if Map.coordinates_to_hex[x][y].building ~= nil then
+			Map.coordinates_to_hex[x][y].building.defenders[i] = nil
+		end
+	end
+	if hex.unit.team == "ally" then
+		resources.human = resources.human - 1
+	end
 	hex.unit = nil
 end
 
-function Map.building_set(hex, building)
-	hex.building = building
-	-- DEBUG !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-	hex.building_active = true
-	-- DEBUG !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-	if building.armor ~= nil then
-		hex.armor = building.armor
+function Map.unit_building_destroy(hex, resources)
+	if hex.building.human ~= nil and hex.building.team == "ally" then
+		resources.human_free = resources.human_free + hex.building.human
 	end
+	hex.unit.action = false
+	Map.building_destroy(hex)
+end
+
+local function set_connected(hex)
+	hex.connected = true
+	for other in Map.iterate() do
+		if Map.distance(hex, other) == 1 and not other.connected and other.building ~= nil and other.building.team == "ally" then
+			set_connected(other)
+		end
+	end
+end
+
+local function recalculate_connected()
+	for hex in Map.iterate() do
+		hex.connected = false
+	end
+	for hex in Map.iterate() do
+		if hex.building ~= nil and hex.building.type.is_center and not hex.connected then
+			set_connected(hex)
+		end
+	end
+end
+
+local function building_update_production(hex)
+	if hex.building.human ~= nil and hex.building.type.production ~= nil and hex.building.type.production[hex.building.human] ~= nil then
+		hex.building.production = hex.building.type.production[hex.building.human]
+	else
+		hex.building.production = {}
+	end
+end
+
+function Map.building_set(hex, building, team)
+	hex.building = {
+		type = building,
+		team = team,
+		human = 0,
+		production = {},
+		-- DEBUG !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+		active = true,
+		-- DEBUG !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+	}
+	building_update_production(hex)
+	recalculate_connected()
 end
 
 function Map.building_destroy(hex)
 	hex.building = nil
+	recalculate_connected()
+end
+
+function Map.building_set_human(hex, value, resources)
+	if hex.building == nil or hex.building.type.cells == nil or hex.building.type.cells < value then
+		return
+	end
+	local old = hex.building.human
+	if hex.building.human == value then
+		hex.building.human = 0
+	else
+		hex.building.human = value
+	end
+	if hex.building.human - old > resources.human_free then
+		hex.building.human = old
+		return
+	end
+	building_update_production(hex)
 end
 
 function Map.update()
-	recalculate_light()
 	for hex in Map.iterate() do
 		if hex.visible then
 			msg.post(hex.id, "enable")
 			local pic
 			if hex.building ~= nil then
-				pic = hex.building.name
+				pic = hex.building.type.name
 			else
 				pic = hex.landscape.name
 			end
+			local highlight_front_url = msg.url(nil, hex.id, "highlight_front")
 			if hex.highlighted then
-				pic = pic .. "_grey"
-			elseif hex.building ~= nil and (not hex.building_active) then
-				pic = pic .. "_off"
+				msg.post(highlight_front_url, "enable")
+			else
+				msg.post(highlight_front_url, "disable")
 			end
-			msg.post(hex.id, "play_animation", {id = hash(pic)})
+			local hex_sprite_url = msg.url(nil, hex.id, "sprite")
+			msg.post(hex_sprite_url, "play_animation", {id = hash(pic)})
 			if hex.unit ~= nil then
 				msg.post(hex.unit.id, "enable")
-				local pic = hex.unit.type
+				local pic = hex.unit.type.name
 				if not hex.unit.action then
-					pic = pic .. "_grey"
+					--pic = pic .. "_grey"
 				end
 				msg.post(hex.unit.id, "play_animation", {id = hash(pic)})
-			end
-
-			if hex.armor ~= 0 then
-				msg.post(hex.armor_id, "enable")
-				msg.post(hex.armor_id, "play_animation", {id = hash("armor" .. tostring(hex.armor))})
-			else
-				msg.post(hex.armor_id, "disable")
 			end
 		else
 			msg.post(hex.id, "disable")
 			if hex.unit ~= nil then
 				msg.post(hex.unit.id, "disable")
 			end
-			msg.post(hex.armor_id, "disable")
 		end
 	end
 end

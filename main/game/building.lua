@@ -4,57 +4,146 @@ local Building = {
 		cost = {
 			wood = 4
 		},
-		importance = 1,
-		light_on = 2,
-		light_off = 2,
 	},
 	farm = {
 		name = "farm",
+		cells = 3,
 		production = {
-			food = 1
+			type = "food",
+			[2] = {
+				food = 3,
+			},
+			[3] = {
+				food = 4,
+			},
 		},
 		cost = {
 			wood = 4
-		},
-		build_options = {
-			"sawmill"
-		},
-		importance = 1,
-		light_on = 3,
-		light_off = 2,
+		}
 	},
 	sawmill = {
 		name = "sawmill",
+		cells = 3,
 		production = {
-			wood = 1
+			type = "wood",
+			[2] = {
+				wood = 1,
+			},
+			[3] = {
+				wood = 2,
+			},
 		},
 		cost = {
 			wood = 4
 		},
-		importance = 1,
-		light_on = 3,
-		light_off = 2,
 	},
 	center = {
 		name = "center",
 		production = {
-			food = 1,
-			wood = 1,
-			stone = 10
+			[0] = {
+				food = 1,
+				wood = 1,
+			},
 		},
-		importance = 2,
-		armor = 3,
-		light_on = 3,
-		light_off = 2,
+		is_center = true,
 	},
-	fortress = {
-		name = "fortress",
+	road = {
+		name = "road",
 		cost = {
-			stone = 4
+			wood = 1
 		},
-		importance = 0,
-		light_on = 3,
-		light_off = 2,
+	},
+	armory = {
+		name = "armory",
+		cost = {
+			wood = 6
+		},
+		actions = {
+			hire_unit_militia = {
+				cost = {
+					wood = 1,
+					human_free = 1,
+				},
+				unit = "militia",
+				title = "Hire militia (w1 h1)"
+			}
+		}
+	},
+	tower = {
+		name = "tower",
+		cost = {
+			wood = 6
+		},
+		actions = {
+			hire_unit_crossbowman = {
+				cost = {
+					wood = 1,
+					human_free = 1,
+				},
+				unit = "crossbowman",
+				title = "Hire crossbowman (w1 h1)"
+			}
+		}
+	},
+	church = {
+		name = "church",
+		cost = {
+			wood = 6
+		},
+		actions = {
+			hire_unit_cleric = {
+				cost = {
+					wood = 1,
+					human_free = 1,
+				},
+				unit = "cleric",
+				title = "Hire cleric (h1)"
+			}
+		}
+	},
+
+	aztec_temple = {
+		name = "aztec_temple",
+		enemy_defence = {
+			size = 3,
+			[1] = {
+				name = "elite_warrior",
+				time = 4,
+			},
+			[2] = {
+				name = "archer",
+				time = 2,
+			},
+			[3] = {
+				name = "shaman",
+				time = 3,
+			},
+		},
+		enemy_offence = {
+			size = 1,
+			[1] = {
+				name = "warrior",
+				time = 7,
+			},
+		}
+	},
+
+	aztec_village = {
+		name = "aztec_village",
+		enemy_defence = {
+			size = 1,
+			[1] = {
+				name = "warrior",
+				time = 5,
+			},
+		},
+		enemy_offence = {
+			size = 1,
+			[1] = {
+				name = "warrior",
+				time = 9,
+			},
+		}
 	}
 }
 

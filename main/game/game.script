@@ -1,60 +1,45 @@
 local Map = require "main/game/map"
 local Landscape = require "main/game/landscape"
 local Building = require "main/game/building"
+local Unit = require "main/game/unit"
 
 local function normalize_resources(self, resources)
 	local norm = {
 		food = 0,
 		wood = 0,
-		stone = 0
+		stone = 0,
+		human = 0,
+		human_free = 0,
+		house = 0,
 	}
 	if resources == nil then
 		return norm
 	end
-	if resources.food ~= nil then
-		norm.food = resources.food
-	end
-	if resources.wood ~= nil then
-		norm.wood = resources.wood
-	end
-	if resources.stone ~= nil then
-		norm.stone = resources.stone
+	for key, value in pairs(resources) do
+		norm[key] = value
 	end
 	return norm
 end
 
-local function invert_resources(self, resources)
-	return {
-		food = -resources.food,
-		wood = -resources.wood,
-		stone = -resources.stone
-	}
-end
-
 local function update_resources(self, resources)
-	norm = normalize_resources(self, resources)
-	self.resources.food = self.resources.food + norm.food
-	self.resources.wood = self.resources.wood + norm.wood
-	self.resources.stone = self.resources.stone + norm.stone
+	for key, value in pairs(resources) do
+		self.resources[key] = self.resources[key] + value
+	end
 	msg.post("gui", hash("update_resources"), self.resources)
 end
 
 local function spend_resources(self, resources)
-	norm = normalize_resources(self, resources)
-	inv = invert_resources(self, norm)
-	update_resources(self, inv)
+	for key, value in pairs(resources) do
+		self.resources[key] = self.resources[key] - value
+	end
+	msg.post("gui", hash("update_resources"), self.resources)
 end
 
 local function check_cost(self, resources)
-	norm = normalize_resources(self, resources)
-	if norm.food > self.resources.food then
-		return false
-	end
-	if norm.wood > self.resources.wood then
-		return false
-	end
-	if norm.stone > self.resources.stone then
-		return false
+	for key, value in pairs(resources) do
+		if value > self.resources[key] then
+			return false
+		end
 	end
 	return true
 end
@@ -63,120 +48,8 @@ local function lose_game(self)
 	print("you lose")
 end
 
-local function enemy_turn(self)
-
-	-- TODO переписать тут всё под освещение
-
-	for barbarian_hex in Map.iterate() do
-		if barbarian_hex.unit ~= nil and barbarian_hex.unit.action then
-			if barbarian_hex.unit.type == "barbarians" then
-				local hex_priority = {}
-				for hex in Map.iterate() do
-					hex_priority[hex] = 0
-				end
-				for hex in Map.iterate() do
-					if hex.visible then
-						local priority = 0
-						if hex.building ~= nil then
-							priority = priority + hex.building.importance
-						end
-						if hex.unit ~= nil and hex.unit.type == "workers" then
-							priority = priority + 4
-						end
-						for other_hex in Map.iterate() do
-							hex_priority[other_hex] = hex_priority[other_hex] + priority / (Map.distance(hex, other_hex) + 1)
-						end
-					end
-				end
-				local max_priority = -1
-				local candidates = {}
-				local candidates_l = 0
-				for hex in Map.iterate() do
-					if hex.visible and (
-					((hex.unit == nil or hex.unit.type == 'workers') and Map.distance(hex, barbarian_hex) == 1) or
-					(hex.building ~= nil and hex == barbarian_hex)
-					) and (hex.building ~= Building.fortress or hex.building_active == false) then
-						if hex_priority[hex] > max_priority then
-							candidates = {}
-							max_priority = hex_priority[hex]
-							table.insert(candidates, hex)
-							candidates_l = 1
-						elseif hex_priority[hex] == max_priority then
-							table.insert(candidates, hex)
-							candidates_l = candidates_l + 1
-						end
-					end
-				end
-				if candidates_l > 0 then
-					local hex = candidates[math.random(candidates_l)]
-					if hex == barbarian_hex then
-						if hex.building == Building.center or hex.building == Building.center2 or hex.building == Building.center3 then
-							lose_game(self)
-						end
-						Map.building_destroy(hex)
-						hex.unit.action = false
-					else
-						if hex.armor > 0 then
-							hex.armor = hex.armor - 1
-						else
-							if hex.unit ~= nil then
-								barbarian_hex.unit.type = "barbarians_capture"
-								Map.unit_destroy(hex)
-							end
-							Map.unit_move(barbarian_hex, hex)
-							hex.unit.action = false
-						end
-					end
-				else
-					barbarian_hex.unit.action = false
-				end
-			elseif barbarian_hex.unit.type == "barbarians_capture" then
-				local max_priority = -1
-				local candidates = {}
-				local candidates_l = 0
-				for hex in Map.iterate() do
-					if hex.unit == nil and Map.distance(hex, barbarian_hex) == 1  then
-						local priority = Map.get_radius(hex)
-						if priority > max_priority then
-							candidates = {}
-							max_priority = priority
-							table.insert(candidates, hex)
-							candidates_l = 1
-						elseif priority == max_priority then
-							table.insert(candidates, hex)
-							candidates_l = candidates_l + 1
-						end
-					end
-				end
-				if candidates_l > 0 then
-					local hex = candidates[math.random(candidates_l)]
-					if hex.armor > 0 then
-						hex.armor = hex.armor - 1
-					else
-						Map.unit_move(barbarian_hex, hex)
-						hex.unit.action = false
-						if hex.visible == false then
-							Map.unit_destroy(hex)
-						end
-					end
-				else
-					barbarian_hex.unit.action = false
-				end
-			end
-		end
-	end
-
-	for hex in Map.iterate() do
-		if hex.unit ~= nil then
-			hex.unit.action = true
-		end
-		if hex.building ~= nil and hex.building_active  then
-			update_resources(self, hex.building.production)
-		end
-	end
-end
-
 local function ChangeState(self, state)
+	msg.post(".", "release_input_focus")
 	if self.state.destroy ~= nil then
 		self.state.destroy(self)
 	end
@@ -194,10 +67,9 @@ local function ChangeState(self, state)
 end
 
 local TILE_CLICK_MSG = hash("tile_click")
-local END_TURN_CLICK_MSG = hash("end_turn_click")
-local MOVE_ACTION_CLICK_MSG = hash("move_action_click")
-local BUILD_ACTION_CLICK_MSG = hash("build_action_click")
-local BACK_CLICK_MSG = hash("back_click")
+local END_TURN_CLICK_MSG = hash("end_turn")
+local BACK_CLICK_MSG = hash("back")
+local BUILD_CLICK_MSG = hash("build_action")
 
 local GameState = {
 	Init = nil,
@@ -208,147 +80,245 @@ local GameState = {
 }
 
 GameState.Init = function(self)
-	self.resources = {
-		food = 0,
-		wood = 8,
-		stone = 10
-	}
+	self.resources = normalize_resources(self, {
+		food = 12,
+		wood = 12,
+		stone = 0,
+		human = 6,
+		human_free = 6
+	})
 	update_resources(self, {})
-	Map.set_radius(2)
+	Map.set_radius(4)
 	Map.generate()
 	self.focus = nil
 	msg.post("camera", "use_projection", { projection = hash("FIXED_AUTO") })
-	msg.post(".", "acquire_input_focus")
 	return {}
 end
 
-GameState.Free = function(self)
-	return {
-		gui = {
-			end_turn = END_TURN_CLICK_MSG
-		},
-		message_handler = {
-			[TILE_CLICK_MSG] = function(self, message)
-				local hex = Map.coordinates_to_hex[message.x][message.y]
-				if hex.unit ~= nil and
-				hex.unit.type == "workers" and 
-				hex.unit.action then
-					self.focus = hex
-					ChangeState(self, GameState.WorkerAction)
-				end
-			end,
-			[END_TURN_CLICK_MSG] = function(self, message)
-				ChangeState(self, GameState.EnemyTurn)
-			end,
-		}
-	}
+local function set_focus(self, hex)
+	if self.focus ~= nil then
+		self.focus.highlighted = false
+	end
+	self.focus = hex
+	if self.focus ~= nil then
+		self.focus.highlighted = true
+	end
 end
 
-GameState.WorkerAction = function(self)
+GameState.Free = function(self)
+	msg.post(".", "acquire_input_focus")
 	local gui = {
 		end_turn = END_TURN_CLICK_MSG,
-		action = {
-			move = MOVE_ACTION_CLICK_MSG,
-			build = BUILD_ACTION_CLICK_MSG,
-			back = BACK_CLICK_MSG
-		}
+		focus = self.focus,
+		back = self.back,
+		build = hash("build_action"),
 	}
 	local message_handler = {
 		[TILE_CLICK_MSG] = function(self, message)
 			local hex = Map.coordinates_to_hex[message.x][message.y]
-			if hex.unit ~= nil and hex.unit.type == "workers" then
-				self.focus = hex
-				ChangeState(self, GameState.WorkerAction)
-			else
-				self.focus = nil
-				ChangeState(self, GameState.Free)
-			end
-		end,
-		[MOVE_ACTION_CLICK_MSG] = function(self, message)
-			ChangeState(self, GameState.WorkerMove)
-		end,
-		[BACK_CLICK_MSG] = function(self, message)
+			set_focus(self, hex)
+			self.back = BACK_CLICK_MSG
 			ChangeState(self, GameState.Free)
-		end,
-		[BUILD_ACTION_CLICK_MSG] = function(self, message)
-			ChangeState(self, GameState.WorkerBuild)
 		end,
 		[END_TURN_CLICK_MSG] = function(self, message)
 			ChangeState(self, GameState.EnemyTurn)
 		end,
+		[hash("build_action")] = function(self, message)
+			self.is_target = function(self, hex)
+				if (hex.unit ~= nil and hex.unit.team == "enemy") or hex.building ~= nil then
+					return false
+				end
+				for other in Map.iterate() do
+					if Map.distance(hex, other) == 1 and other.connected then
+						return true
+					end
+				end
+				return false
+			end
+			self.on_target_select = function(self, target)
+				self.target = target
+				set_focus(self, nil)
+				self.back = nil
+				ChangeState(self, GameState.Build)
+			end
+			ChangeState(self, GameState.Target)
+		end,
+		[hash("move_action")] = function(self, message)
+			self.is_target = function(self, hex)
+				return Map.distance(self.focus, hex) == 1 and hex.unit == nil
+			end
+			self.on_target_select = function(self, target)
+				Map.unit_move(self.focus, target)
+				set_focus(self, nil)
+				self.back = nil
+				ChangeState(self, GameState.Free)
+			end
+			ChangeState(self, GameState.Target)
+		end,
+		[hash("attack_action")] = function(self, message)
+			self.is_target = function(self, hex)
+				return Map.distance(self.focus, hex) == 1 and hex.unit ~= nil and hex.unit.team == "enemy"
+			end
+			self.on_target_select = function(self, target)
+				Map.unit_fight(self.focus, target, self.resources)
+				set_focus(self, nil)
+				self.back = nil
+				ChangeState(self, GameState.Free)
+			end
+			ChangeState(self, GameState.Target)
+		end,
+		[hash("shoot_action")] = function(self, message)
+			self.is_target = function(self, hex)
+				return Map.distance(self.focus, hex) == 1 and hex.unit ~= nil and hex.unit.team == "enemy"
+			end
+			self.on_target_select = function(self, target)
+				Map.unit_shoot(self.focus, target, self.resources)
+				set_focus(self, nil)
+				self.back = nil
+				ChangeState(self, GameState.Free)
+			end
+			ChangeState(self, GameState.Target)
+		end,
+		[hash("heal_action")] = function(self, message)
+			self.is_target = function(self, hex)
+				return Map.distance(self.focus, hex) == 1 and hex.unit ~= nil and hex.unit.team == "ally"
+			end
+			self.on_target_select = function(self, target)
+				Map.unit_heal(self.focus, target)
+				set_focus(self, nil)
+				self.back = nil
+				ChangeState(self, GameState.Free)
+			end
+			ChangeState(self, GameState.Target)
+		end,
+		[hash("reload_action")] = function(self, message)
+			Map.unit_reload(self.focus)
+			set_focus(self, nil)
+			self.back = nil
+			ChangeState(self, GameState.Free)
+		end,
+		[hash("destroy_action")] = function(self, message)
+			Map.unit_building_destroy(self.focus, self.resources)
+			set_focus(self, nil)
+			self.back = nil
+			ChangeState(self, GameState.Free)
+		end,
+		[hash("hire_unit_militia")] = function(self, message)
+			local action = self.focus.building.type.actions.hire_unit_militia
+			if self.focus.unit ~= nil or not check_cost(self, action.cost) then
+				return
+			end
+			spend_resources(self, action.cost)
+			Map.unit_spawn(self.focus, Unit[action.unit], "ally")
+			self.focus.unit.action = false
+			ChangeState(self, GameState.Free)
+		end,
+		[hash("hire_unit_cleric")] = function(self, message)
+			local action = self.focus.building.type.actions.hire_unit_cleric
+			if self.focus.unit ~= nil or not check_cost(self, action.cost) then
+				return
+			end
+			spend_resources(self, action.cost)
+			Map.unit_spawn(self.focus, Unit[action.unit], "ally")
+			self.focus.unit.action = false
+			ChangeState(self, GameState.Free)
+		end,
+		[hash("hire_unit_crossbowman")] = function(self, message)
+			local action = self.focus.building.type.actions.hire_unit_crossbowman
+			if self.focus.unit ~= nil or not check_cost(self, action.cost) then
+				return
+			end
+			spend_resources(self, action.cost)
+			Map.unit_spawn(self.focus, Unit[action.unit], "ally")
+			self.focus.unit.action = false
+			ChangeState(self, GameState.Free)
+		end,
+		[BACK_CLICK_MSG] = function(self, message)
+			set_focus(self, nil)
+			self.back = nil
+			ChangeState(self, GameState.Free)
+		end,
 	}
 
-	--TODO потом возможно забабахать тут отдельно кнопку для апгрейдов, а пока так пусть будет
-	
+	for i = 1, 6 do
+		message_handler[hash("human_cell" .. i)] = function(self, message)
+			local old = self.focus.building.human
+			Map.building_set_human(self.focus, i, self.resources)
+			spend_resources(self, {human_free = self.focus.building.human - old})
+			ChangeState(self, GameState.Free)
+		end
+	end
+
 	return {
 		gui = gui,
-		message_handler = message_handler
+		message_handler = message_handler,
 	}
 end
 
-GameState.WorkerMove = function(self)
-	local function is_move_option(self, hex)
-		return Map.distance(self.focus, hex) == 1 and hex.unit == nil
+GameState.Target = function(self)
+	msg.post(".", "acquire_input_focus")
+	local gui = {
+		back = self.back,
+	}
+	local message_handler = {
+		[TILE_CLICK_MSG] = function(self, message)
+			local target = Map.coordinates_to_hex[message.x][message.y]
+			if self.is_target(self, target) then
+				self.on_target_select(self, target)
+				self.back = nil
+			end
+		end,
+		[BACK_CLICK_MSG] = function(self, message)
+			ChangeState(self, GameState.Free)
+			self.back = nil
+		end,
+	}
+	local init = function(self)
+		for hex in Map.iterate() do
+			hex.highlighted = self.is_target(self, hex)
+		end
+	end
+	local destroy = function(self)
+		for hex in Map.iterate() do
+			hex.highlighted = false
+		end
 	end
 	return {
-		init = function(self)
-			for hex in Map.iterate() do
-				hex.highlighted = is_move_option(self, hex)
-			end
-		end,
-		destroy = function(self)
-			for hex in Map.iterate() do
-				hex.highlighted = false
-			end
-		end,
-		gui = {
-			action = {
-				back = BACK_CLICK_MSG
-			}
-		},
-		message_handler = {
-			[TILE_CLICK_MSG] = function(self, message)
-				local target = Map.coordinates_to_hex[message.x][message.y]
-				if is_move_option(self, target) then
-					self.focus.unit.action = false
-					Map.unit_move(self.focus, target)
-					ChangeState(self, GameState.Free)
-				end
-			end,
-			[BACK_CLICK_MSG] = function(self, message)
-				ChangeState(self, GameState.WorkerAction)
-			end,
-		}
+		gui = gui,
+		message_handler = message_handler,
+		init = init,
+		destroy = destroy,
 	}
 end
 
-GameState.WorkerBuild = function(self)
+GameState.Build = function(self)
 	local gui = {
-		action = {
-			back = BACK_CLICK_MSG
-		},
-		build = {}
+		back = BACK_CLICK_MSG,
+		build_menu = {},
 	}
 	local message_handler = {
 		[BACK_CLICK_MSG] = function(self, message)
-			ChangeState(self, GameState.WorkerAction)
+			self.target = nil
+			ChangeState(self, GameState.Free)
 		end,
 	}
 	local options
-	if self.focus.building == nil then
-		options = self.focus.landscape.build_options
+	if self.target.building == nil then
+		options = self.target.landscape.build_options
 	else
-		options = self.focus.building.build_options
+		options = self.target.building.type.build_options
 	end
 	if options ~= nil then
 		for _, option in pairs(options) do
-			gui.build[option] = normalize_resources(self, Building[option].cost)
+			gui.build_menu[option] = normalize_resources(self, Building[option].cost)
 			message_handler[hash(option)] = function(self, message)
 				if check_cost(self, Building[option].cost) then
 					spend_resources(self, Building[option].cost)
-					self.focus.unit.action = false
-					Map.building_set(self.focus, Building[option])
-					self.focus = nil
+					Map.building_set(self.target, Building[option], "ally")
+					if option == "house" then
+						update_resources(self, {human = 2, human_free = 2})
+					end
+					self.target = nil
 					ChangeState(self, GameState.Free)
 				else
 					print("resources requirements are not satisfied")
@@ -364,10 +334,194 @@ end
 
 GameState.EnemyTurn = function(self)
 	return {
-		-- TODO message-based state chane
+		-- TODO message-based state change
 		init = function(self)
-			enemy_turn(self)
-			ChangeState(self, GameState.Free)
+			for hex in Map.iterate() do
+				if hex.building ~= nil and hex.building.team == "enemy" then
+					if hex.building.producing ~= nil then
+						hex.building.producing.time = hex.building.producing.time - 1
+						if hex.building.producing.time <= 0 then
+							if hex.unit == nil then
+								local i = hex.building.producing.index
+								if hex.building.producing.behaviour == "defender" then
+									Map.unit_spawn(hex, Unit[hex.building.type.enemy_defence[i].name], "enemy")
+									hex.unit.action = false
+									hex.unit.enemy_defender_anchor_x = hex.x
+									hex.unit.enemy_defender_anchor_y = hex.y
+									hex.unit.enemy_defender_index = i
+									hex.unit.enemy_behaviour = "defender"
+									hex.building.defenders[i] = hex.unit
+								elseif hex.building.producing.behaviour == "raider" then
+									Map.unit_spawn(hex, Unit[hex.building.type.enemy_offence[i].name], "enemy")
+									hex.unit.action = false
+									hex.unit.enemy_behaviour = "raider"
+								end
+								hex.building.producing = nil
+							end
+						end
+					end
+					if hex.building.producing == nil then
+						if hex.building.type.enemy_defence ~= nil then
+							if hex.building.defenders == nil then
+								hex.building.defenders = {}
+							end
+							for i = 1, hex.building.type.enemy_defence.size do
+								if hex.building.defenders[i] == nil then
+									hex.building.producing = {
+										index = i,
+										behaviour = "defender",
+										time = hex.building.type.enemy_defence[i].time,
+									}
+									break
+								end
+							end
+						end
+					end
+					if hex.building.producing == nil then
+						if hex.building.type.enemy_offence ~= nil then
+							local i = math.random(hex.building.type.enemy_offence.size)
+							hex.building.producing = {
+								index = i,
+								behaviour = "raider",
+								time = hex.building.type.enemy_offence[i].time,
+							}
+						end
+					end
+				end
+
+				if hex.unit ~= nil and hex.unit.team == "enemy" then
+					while hex.unit ~= nil and hex.unit.action do
+						local candidates = {}
+						local candidates_l = 1
+						table.insert(candidates, hex)
+						local t_priority = 100
+						if hex.building ~= nil and hex.building.team == "ally" then
+							t_priority = 5
+						end
+						if hex.unit.type.feats.reload ~= nil then
+							t_priority = 5
+						end
+						for candidate in Map.iterate() do
+							if Map.distance(hex, candidate) == 1 then
+								local c_priority = 1000
+								if candidate.unit ~= nil then
+									if hex.unit.type.power ~= 0 and candidate.unit.team == "ally" then
+										c_priority = 20
+									end
+									if hex.unit.type.feats.healer ~= nil and candidate.unit.team == "enemy" then
+										c_priority = 10
+									end
+								else
+									if hex.unit.enemy_behaviour == "scout" then
+										c_priority = 15
+									elseif hex.unit.enemy_behaviour == "raider" then
+										for bhex in Map.iterate() do
+											if bhex.building ~= nil and bhex.building.team == "ally" then
+												c_priority = math.min(c_priority, 25 + Map.distance(candidate, bhex))
+											end
+										end
+									elseif hex.unit.enemy_behaviour == "defender" then
+										local anchor = Map.coordinates_to_hex[hex.unit.enemy_defender_anchor_x][hex.unit.enemy_defender_anchor_y]
+										if Map.distance(candidate, anchor) == 0 then
+											c_priority = 27
+										elseif Map.distance(candidate, anchor) <= 2 then
+											c_priority = 26
+										else
+											c_priority = 26 + Map.distance(candidate, anchor)
+										end
+									end
+								end
+								if c_priority < t_priority then
+									t_priority = c_priority
+									candidates = {}
+									table.insert(candidates, candidate)
+									candidates_l = 1
+								elseif c_priority == t_priority then
+									table.insert(candidates, candidate)
+									candidates_l = candidates_l + 1
+								end
+							end
+						end
+						if candidates_l > 0 then
+							local target = candidates[math.random(candidates_l)]
+							if target == hex then
+								if hex.unit.type.feats.reload ~= nil then
+									Map.unit_reload(hex)
+								elseif hex.building ~= nil and hex.building.team == "ally" then
+									Map.unit_building_destroy(hex, self.resources)
+								else
+									hex.unit.action = false
+								end
+							else
+								if target.unit == nil then
+									Map.unit_move(hex, target)
+								else
+									if target.unit.team == "enemy" then
+										if hex.unit.type.feats.healer ~= nil then
+											Map.unit_heal(hex, target)
+										end
+									else
+										if hex.unit.type.feats.shoot ~= nil then
+											Map.unit_shoot(hex, target, self.resources)
+										elseif hex.unit.type.power > 0 then
+											Map.unit_fight(hex, target, self.resources)
+										else
+											hex.unit.action = false
+										end
+									end
+								end
+							end
+						end
+					end
+				end
+			end
+		
+			for hex in Map.iterate() do
+				if hex.unit ~= nil then
+					hex.unit.action = true
+				end
+				if hex.building ~= nil and hex.building.active then
+					update_resources(self, hex.building.production)
+				end
+			end
+			spend_resources(self, {food = self.resources.human})
+			if self.resources.food < 0 then
+				self.resources.human = self.resources.human - math.min(self.resources.human_free, -self.resources.food)
+				self.resources.human_free = self.resources.human_free + self.resources.food
+				self.resources.food = 0
+				ChangeState(self, GameState.ChooseDead)
+			else
+				ChangeState(self, GameState.Free)
+			end
+		end
+	}
+end
+
+GameState.ChooseDead = function(self)
+	return {
+		init = function(self)
+			update_resources(self, {})
+			if self.resources.human_free < 0 then
+				self.is_target = function(self, hex)
+					return (hex.unit ~= nil and hex.unit.team == "ally") or (hex.building ~= nil and hex.building.team == "ally" and hex.building.human ~= nil and hex.building.human > 0)
+				end
+				self.on_target_select = function(self, target)
+					if target.unit ~= nil and target.unit.team == "ally" then
+						Map.unit_destroy(target, spend_resources)
+						update_resources(self, {})
+					else
+						target.building.human = target.building.human - 1
+					end
+					self.resources.human = self.resources.human - 1
+					self.resources.human_free = self.resources.human_free + 1
+					ChangeState(self, GameState.ChooseDead)
+				end
+				self.back = nil
+				ChangeState(self, GameState.Target)
+			else
+				update_resources(self, {})
+				ChangeState(self, GameState.Free)
+			end
 		end
 	}
 end

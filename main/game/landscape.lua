@@ -2,32 +2,33 @@ local Landscape = {
 	barren = {
 		name = "barren",
 		build_options = {
+			"armory",
+			"church",
+			"tower",
+			"road",
 			"house",
-			"fortress",
 		}
 	},
 	wheat = {
 		name = "wheat",
 		build_options = {
+			"armory",
+			"church",
+			"tower",
+			"road",
 			"house",
 			"farm",
-			"fortress",
 		}
 	},
 	forest = {
 		name = "forest",
 		build_options = {
+			"armory",
+			"church",
+			"tower",
+			"road",
 			"house",
 			"sawmill",
-			"fortress",
-		}
-	},
-	stone = {
-		name = "stone",
-		build_options = {
-			"house",
-			"quarry",
-			"fortress",
 		}
 	},
 }

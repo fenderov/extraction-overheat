@@ -1,53 +1,77 @@
 local MOVE_BUTTON = "move/button/base"
 local BUILD_BUTTON = "build/button/base"
 local BACK_BUTTON = "back/button/base"
-local ACTION_BUTTON_Y_STEP = -200
-local BUILD_BUTTON_X_STEP = 300
-local END_TURN_BUTTON = "end_turn/base"
-local BUILD_FIELD = "build_box"
+local BUILD_BUTTON_X_STEP = 160
+local END_TURN_BUTTON = "end_turn/box"
+local BUILD_BOX = "build_box"
 local BUILD_BUTTON_BOX = "build_button/box"
 local BUILD_BUTTON_PIC = "build_button/hex_pic"
 local BUILD_BUTTON_WOOD_TXT = "build_button/wood_cost"
 local BUILD_BUTTON_STONE_TXT = "build_button/stone_cost"
+local BUILD_ACTION_BOX =  "build/box"
 
-local function render_button(self, button_url, message_id)
+local UNIT_BOX = "unit_box"
+local UNIT_PIC = "unit_pic"
+local UNIT_NAME_TEXT = "unit_name_text"
+local UNIT_HEALTH_TEXT = "unit_health/text"
+local UNIT_POWER_TEXT = "unit_power/text"
+local UNIT_FEATS_TEXT = "unit_feats_text"
+
+local UNIT_ACTION_BOX = "unit_action/box"
+local UNIT_ACTION_TEXT = "unit_action/text"
+
+local HEX_BOX = "hex_box"
+local HEX_PIC = "hex_pic"
+local HEX_NAME_TEXT = "hex_name_text"
+local HEX_DESCRIPTION_TEXT = "hex_description_text"
+
+local HEX_ACTION_BOX = "hex_action/box"
+local HEX_ACTION_TEXT = "hex_action/text"
+
+local HEX_RESOURCE = "hex_resource/box"
+local HEX_HUMAN_CELL = "hex_resource/human_cell"
+local HEX_RESOURCE_ICON = "hex_resource/resource/icon"
+local HEX_RESOURCE_TEXT = "hex_resource/resource/text"
+
+local END_TURN_BOX = "unit_action/box"
+local END_TURN_TEXT = "unit_action/text"
+
+local CLOSE_BOX = "close/box"
+
+local ACTION_BUTTON_Y_STEP = 74
+
+local cloned_buttons = {}
+local active_buttons = {}
+
+local function clone_button(origin, callback)
+	local clones = gui.clone_tree(gui.get_node(origin))
+	cloned_buttons[callback] = clones[origin]
+	active_buttons[callback] = clones[origin]
+	gui.set_enabled(clones[origin], true)
+	return clones
+end
+
+local function clear_cloned_buttons()
+	for callback, clone_base in pairs(cloned_buttons) do
+		gui.delete_node(clone_base)
+	end
+	cloned_buttons = {}
+end
+
+local function render_button(button_url, message_id)
 	local button = gui.get_node(button_url)
-	self.active_buttons[message_id] = button
+	active_buttons[message_id] = button
 	gui.set_enabled(button, true)
 end
 
-local function render_action(self, options)
-	local x = 0
-	local y = 0
-	if options.move ~= nil then
-		render_button(self, MOVE_BUTTON, options.move)
-		gui.set_position(self.active_buttons[options.move], vmath.vector3(x, y, 0))
-		y = y + ACTION_BUTTON_Y_STEP
-	end
-	if options.build ~= nil then
-		render_button(self, BUILD_BUTTON, options.build)
-		gui.set_position(self.active_buttons[options.build], vmath.vector3(x, y, 0))
-		y = y + ACTION_BUTTON_Y_STEP
-	end
-	if options.back ~= nil then
-		render_button(self, BACK_BUTTON, options.back)
-		gui.set_position(self.active_buttons[options.back], vmath.vector3(x, y, 0))
-		y = y + ACTION_BUTTON_Y_STEP
-	end
-end
-
-local function render_build(self, options)
-	local x = 300
-	local y = -300
-	gui.set_enabled(gui.get_node(BUILD_FIELD), true)
+local function render_build(options)
+	gui.set_enabled(gui.get_node(BUILD_BOX), true)
+	pos = gui.get_position(gui.get_node(BUILD_BUTTON_BOX))
 	for option, cost in pairs(options) do
-		local clones = gui.clone_tree(gui.get_node(BUILD_BUTTON_BOX))
-		gui.set_enabled(clones[BUILD_BUTTON_BOX], true)
-		gui.set_position(clones[BUILD_BUTTON_BOX], vmath.vector3(x, y, 0))
-		self.active_buttons[hash(option)] = clones[BUILD_BUTTON_BOX]
-		self.build_buttons[hash(option)] = clones[BUILD_BUTTON_BOX]
+		local clones = clone_button(BUILD_BUTTON_BOX, hash(option))
+		gui.set_position(clones[BUILD_BUTTON_BOX], pos)
 		gui.play_flipbook(clones[BUILD_BUTTON_PIC], option)
-		x = x + BUILD_BUTTON_X_STEP
+		pos.x = pos.x + BUILD_BUTTON_X_STEP
 		local wood = clones[BUILD_BUTTON_WOOD_TXT]
 		gui.set_text(wood, "Wood: " .. cost.wood)
 		local stone = clones[BUILD_BUTTON_STONE_TXT]
@@ -55,54 +79,155 @@ local function render_build(self, options)
 	end
 end
 
-local function erase_build(self)
-	gui.set_enabled(gui.get_node(BUILD_FIELD), false)
-	for option, clone_base in pairs(self.build_buttons) do
-		gui.delete_node(clone_base)
+local function render_focus_info(hex)
+	gui.set_enabled(gui.get_node(HEX_BOX), true)
+	if hex.building ~= nil then
+		gui.set_text(gui.get_node(HEX_NAME_TEXT), hex.building.type.name)
+		gui.play_flipbook(gui.get_node(HEX_PIC), hex.building.type.name)
+
+		if hex.building.type.cells ~= nil then
+			gui.set_enabled(gui.get_node(HEX_RESOURCE), true)
+			local type = hex.building.type.production.type
+			gui.play_flipbook(gui.get_node(HEX_RESOURCE_ICON), type)
+			if hex.building.production[type] ~= nil then
+				gui.set_text(gui.get_node(HEX_RESOURCE_TEXT), " +" .. hex.building.production[type])
+			else
+				gui.set_text(gui.get_node(HEX_RESOURCE_TEXT), " +0")
+			end
+			for i = 1, hex.building.type.cells do
+				render_button(HEX_HUMAN_CELL .. i, hash("human_cell" .. i))
+				if i <= hex.building.human then
+					gui.play_flipbook(gui.get_node(HEX_HUMAN_CELL .. i), "human_cell_full")
+				elseif hex.building.type.production[i - 1] ~= nil then
+					gui.play_flipbook(gui.get_node(HEX_HUMAN_CELL .. i), "human_cell_required")
+				else
+					gui.play_flipbook(gui.get_node(HEX_HUMAN_CELL .. i), "human_cell_extra")
+				end
+			end
+		else
+			gui.set_enabled(gui.get_node(HEX_RESOURCE), false)
+		end
+
+		if hex.building.type.actions ~= nil then
+			pos = gui.get_position(gui.get_node(HEX_ACTION_BOX))
+			for key, value in pairs(hex.building.type.actions) do
+				local clones = clone_button(HEX_ACTION_BOX, hash(key))
+				gui.set_text(clones[HEX_ACTION_TEXT], value.title)
+				gui.set_position(clones[HEX_ACTION_BOX], pos)
+				pos.y = pos.y - ACTION_BUTTON_Y_STEP
+			end
+		end
+	else
+		gui.set_enabled(gui.get_node(HEX_RESOURCE), false)
+		gui.set_text(gui.get_node(HEX_NAME_TEXT), hex.landscape.name)
+		gui.play_flipbook(gui.get_node(HEX_PIC), hex.landscape.name)
 	end
-	self.build_buttons = {}
+
+	if hex.unit ~= nil then
+		gui.set_enabled(gui.get_node(UNIT_BOX), true)
+		gui.set_text(gui.get_node(UNIT_NAME_TEXT), hex.unit.type.name)
+		gui.play_flipbook(gui.get_node(UNIT_PIC), hex.unit.type.name)
+		gui.set_text(gui.get_node(UNIT_HEALTH_TEXT),": " .. hex.unit.health)
+		gui.set_text(gui.get_node(UNIT_POWER_TEXT),": " .. hex.unit.type.power)
+
+		if hex.unit.action and hex.unit.team == "ally" then
+			pos = gui.get_position(gui.get_node(UNIT_ACTION_BOX))
+	
+			local clones = clone_button(UNIT_ACTION_BOX, hash("move_action"))
+			gui.set_text(clones[UNIT_ACTION_TEXT], "Move")
+			gui.set_position(clones[UNIT_ACTION_BOX], pos)
+			pos.y = pos.y - ACTION_BUTTON_Y_STEP
+			
+			if hex.unit.type.feats.shoot ~= nil then
+				if hex.unit.type.feats.reload ~= nil and hex.unit.need_reload then
+					clones = clone_button(UNIT_ACTION_BOX, hash("reload_action"))
+					gui.set_text(clones[UNIT_ACTION_TEXT], "Reload")
+					gui.set_position(clones[UNIT_ACTION_BOX], pos)
+					pos.y = pos.y - ACTION_BUTTON_Y_STEP
+				else
+					clones = clone_button(UNIT_ACTION_BOX, hash("shoot_action"))
+					gui.set_text(clones[UNIT_ACTION_TEXT], "Shoot")
+					gui.set_position(clones[UNIT_ACTION_BOX], pos)
+					pos.y = pos.y - ACTION_BUTTON_Y_STEP
+				end
+			elseif hex.unit.type.power > 0 then
+				clones = clone_button(UNIT_ACTION_BOX, hash("attack_action"))
+				gui.set_text(clones[UNIT_ACTION_TEXT], "Attack")
+				gui.set_position(clones[UNIT_ACTION_BOX], pos)
+				pos.y = pos.y - ACTION_BUTTON_Y_STEP
+			end
+			
+			if hex.unit.type.feats.healer ~= nil then
+				clones = clone_button(UNIT_ACTION_BOX, hash("heal_action"))
+				gui.set_text(clones[UNIT_ACTION_TEXT], "Heal")
+				gui.set_position(clones[UNIT_ACTION_BOX], pos)
+				pos.y = pos.y - ACTION_BUTTON_Y_STEP
+			end
+
+			if hex.building ~= nil and hex.building.team == "enemy" then
+				clones = clone_button(UNIT_ACTION_BOX, hash("destroy_action"))
+				gui.set_text(clones[UNIT_ACTION_TEXT], "Destroy")
+				gui.set_position(clones[UNIT_ACTION_BOX], pos)
+				pos.y = pos.y - ACTION_BUTTON_Y_STEP
+			end
+		end
+	end
 end
 
-local function clear_gui(self)
-	for message_id, button in pairs(self.active_buttons) do
+local function clear_gui()
+	for message_id, button in pairs(active_buttons) do
 		gui.set_enabled(button, false)
-		self.active_buttons[message_id] = nil
+		active_buttons[message_id] = nil
 	end
-	erase_build(self)
+	gui.set_enabled(gui.get_node(BUILD_BOX), false)
+	gui.set_enabled(gui.get_node(HEX_BOX), false)
+	gui.set_enabled(gui.get_node(UNIT_BOX), false)
+	gui.set_enabled(gui.get_node(END_TURN_BOX), false)
+	gui.set_enabled(gui.get_node(CLOSE_BOX), false)
+	gui.set_enabled(gui.get_node(BUILD_ACTION_BOX), false)
+	clear_cloned_buttons()
 end
 
 function init(self)
 	msg.post(".", "acquire_input_focus")
-	self.active_buttons = {}
-	self.build_buttons = {}
 end
 
 function on_message(self, message_id, message, sender)
 	if message_id == hash("render") then
-		clear_gui(self)
+		clear_gui()
 		if message.end_turn ~= nil then
-			render_button(self, END_TURN_BUTTON, message.end_turn)
+			render_button(END_TURN_BUTTON, message.end_turn)
 		end
-		if message.action ~= nil then
-			render_action(self, message.action)
+		if message.focus ~= nil then
+			render_focus_info(message.focus)
 		end
 		if message.build ~= nil then
-			render_build(self, message.build)
+			render_button(BUILD_ACTION_BOX, message.build)
+		end
+		if message.build_menu ~= nil then
+			render_build(message.build_menu)
+		end
+		if message.back ~= nil then
+			render_button(CLOSE_BOX, message.back)
 		end
 	end
 	if message_id == hash("update_resources") then
-		local food = gui.get_node("food_res_txt")
-		gui.set_text(food, "Food: " .. message.food)
-		local wood = gui.get_node("wood_res_txt")
-		gui.set_text(wood, "Wood: " .. message.wood)
-		local stone = gui.get_node("stone_res_txt")
-		gui.set_text(stone, "Stone: " .. message.stone)
+		local food = gui.get_node("resource_food/text")
+		gui.set_text(food, ": " .. message.food)
+		local wood = gui.get_node("resource_wood/text")
+		gui.set_text(wood, ": " .. message.wood)
+		local human = gui.get_node("resource_human/text")
+		gui.set_text(human, ": " .. message.human)
+		local human_free = gui.get_node("resource_human_free/text")
+		gui.set_text(human_free, ": " .. message.human_free)
+		local house = gui.get_node("resource_house/text")
+		gui.set_text(house, ": " .. message.house)
 	end
 end
 
 function on_input(self, action_id, action)
 	if action_id == hash("touch") and action.released then
-		for message_id, node in pairs(self.active_buttons) do
+		for message_id, node in pairs(active_buttons) do
 			if gui.pick_node(node, action.x, action.y) then
 				msg.post("game", message_id)
 			end
