@@ -1,109 +1,61 @@
 images {
-  image: "/main/source/hexes/barren.png"
+  image: "/main/source/hexes/crystal0.png"
   sprite_trim_mode: SPRITE_TRIM_MODE_OFF
 }
 images {
-  image: "/main/source/hexes/barren_grey.png"
+  image: "/main/source/hexes/crystal1.png"
   sprite_trim_mode: SPRITE_TRIM_MODE_OFF
 }
 images {
-  image: "/main/source/hexes/farm.png"
+  image: "/main/source/hexes/crystal2.png"
   sprite_trim_mode: SPRITE_TRIM_MODE_OFF
 }
 images {
-  image: "/main/source/hexes/farm_grey.png"
+  image: "/main/source/hexes/crystal3.png"
   sprite_trim_mode: SPRITE_TRIM_MODE_OFF
 }
 images {
-  image: "/main/source/hexes/farm_off.png"
+  image: "/main/source/hexes/crystal4.png"
   sprite_trim_mode: SPRITE_TRIM_MODE_OFF
 }
 images {
-  image: "/main/source/hexes/forest.png"
+  image: "/main/source/hexes/empty0.png"
   sprite_trim_mode: SPRITE_TRIM_MODE_OFF
 }
 images {
-  image: "/main/source/hexes/forest_grey.png"
+  image: "/main/source/hexes/empty1.png"
   sprite_trim_mode: SPRITE_TRIM_MODE_OFF
 }
 images {
-  image: "/main/source/hexes/sawmill.png"
+  image: "/main/source/hexes/empty2.png"
   sprite_trim_mode: SPRITE_TRIM_MODE_OFF
 }
 images {
-  image: "/main/source/hexes/sawmill_grey.png"
+  image: "/main/source/hexes/empty3.png"
   sprite_trim_mode: SPRITE_TRIM_MODE_OFF
 }
 images {
-  image: "/main/source/hexes/sawmill_off.png"
+  image: "/main/source/hexes/empty4.png"
   sprite_trim_mode: SPRITE_TRIM_MODE_OFF
 }
 images {
-  image: "/main/source/hexes/wheat.png"
+  image: "/main/source/hexes/metal0.png"
   sprite_trim_mode: SPRITE_TRIM_MODE_OFF
 }
 images {
-  image: "/main/source/hexes/wheat_grey.png"
+  image: "/main/source/hexes/metal1.png"
   sprite_trim_mode: SPRITE_TRIM_MODE_OFF
 }
 images {
-  image: "/main/source/hexes/center.png"
+  image: "/main/source/hexes/metal2.png"
   sprite_trim_mode: SPRITE_TRIM_MODE_OFF
 }
 images {
-  image: "/main/source/hexes/center2.png"
+  image: "/main/source/hexes/metal3.png"
   sprite_trim_mode: SPRITE_TRIM_MODE_OFF
 }
 images {
-  image: "/main/source/hexes/center3.png"
-  sprite_trim_mode: SPRITE_TRIM_MODE_OFF
-}
-images {
-  image: "/main/source/hexes/house.png"
-  sprite_trim_mode: SPRITE_TRIM_MODE_OFF
-}
-images {
-  image: "/main/source/hexes/center2_grey.png"
-  sprite_trim_mode: SPRITE_TRIM_MODE_OFF
-}
-images {
-  image: "/main/source/hexes/center3_grey.png"
-  sprite_trim_mode: SPRITE_TRIM_MODE_OFF
-}
-images {
-  image: "/main/source/hexes/center_grey.png"
-  sprite_trim_mode: SPRITE_TRIM_MODE_OFF
-}
-images {
-  image: "/main/source/hexes/house_grey.png"
-  sprite_trim_mode: SPRITE_TRIM_MODE_OFF
-}
-images {
-  image: "/main/source/hexes/fortress.png"
-  sprite_trim_mode: SPRITE_TRIM_MODE_OFF
-}
-images {
-  image: "/main/source/hexes/armory.png"
-  sprite_trim_mode: SPRITE_TRIM_MODE_OFF
-}
-images {
-  image: "/main/source/hexes/aztec_temple.png"
-  sprite_trim_mode: SPRITE_TRIM_MODE_OFF
-}
-images {
-  image: "/main/source/hexes/aztec_village.png"
-  sprite_trim_mode: SPRITE_TRIM_MODE_OFF
-}
-images {
-  image: "/main/source/hexes/church.png"
-  sprite_trim_mode: SPRITE_TRIM_MODE_OFF
-}
-images {
-  image: "/main/source/hexes/road.png"
-  sprite_trim_mode: SPRITE_TRIM_MODE_OFF
-}
-images {
-  image: "/main/source/hexes/tower.png"
+  image: "/main/source/hexes/metal4.png"
   sprite_trim_mode: SPRITE_TRIM_MODE_OFF
 }
 margin: 0

@@ -1,236 +1,372 @@
-local MOVE_BUTTON = "move/button/base"
-local BUILD_BUTTON = "build/button/base"
-local BACK_BUTTON = "back/button/base"
-local BUILD_BUTTON_X_STEP = 160
-local END_TURN_BUTTON = "end_turn/box"
-local BUILD_BOX = "build_box"
-local BUILD_BUTTON_BOX = "build_button/box"
-local BUILD_BUTTON_PIC = "build_button/hex_pic"
-local BUILD_BUTTON_WOOD_TXT = "build_button/wood_cost"
-local BUILD_BUTTON_STONE_TXT = "build_button/stone_cost"
-local BUILD_ACTION_BOX =  "build/box"
+local Data = require "main/game/data"
+local Content = require "main/game/content"
 
-local UNIT_BOX = "unit_box"
-local UNIT_PIC = "unit_pic"
-local UNIT_NAME_TEXT = "unit_name_text"
-local UNIT_HEALTH_TEXT = "unit_health/text"
-local UNIT_POWER_TEXT = "unit_power/text"
-local UNIT_FEATS_TEXT = "unit_feats_text"
-
-local UNIT_ACTION_BOX = "unit_action/box"
-local UNIT_ACTION_TEXT = "unit_action/text"
-
-local HEX_BOX = "hex_box"
-local HEX_PIC = "hex_pic"
-local HEX_NAME_TEXT = "hex_name_text"
-local HEX_DESCRIPTION_TEXT = "hex_description_text"
-
-local HEX_ACTION_BOX = "hex_action/box"
-local HEX_ACTION_TEXT = "hex_action/text"
-
-local HEX_RESOURCE = "hex_resource/box"
-local HEX_HUMAN_CELL = "hex_resource/human_cell"
-local HEX_RESOURCE_ICON = "hex_resource/resource/icon"
-local HEX_RESOURCE_TEXT = "hex_resource/resource/text"
-
-local END_TURN_BOX = "unit_action/box"
-local END_TURN_TEXT = "unit_action/text"
-
-local CLOSE_BOX = "close/box"
-
-local ACTION_BUTTON_Y_STEP = 74
-
-local cloned_buttons = {}
-local active_buttons = {}
-
-local function clone_button(origin, callback)
-	local clones = gui.clone_tree(gui.get_node(origin))
-	cloned_buttons[callback] = clones[origin]
-	active_buttons[callback] = clones[origin]
-	gui.set_enabled(clones[origin], true)
-	return clones
+local function set_number(url, value)
+	local high = gui.get_node(url .. "_digit_high")
+	local low = gui.get_node(url .. "_digit_low")
+	gui.play_flipbook(high, tostring(math.floor(value / 10) % 10))
+	gui.play_flipbook(low, tostring(value % 10))
 end
 
-local function clear_cloned_buttons()
-	for callback, clone_base in pairs(cloned_buttons) do
-		gui.delete_node(clone_base)
-	end
-	cloned_buttons = {}
+local function update_resources()
+	local resources = Data.get_resources()
+	set_number("metal", resources.metal)
+	set_number("crystal", resources.crystal)
+	set_number("energy", resources.energy)
+	set_number("max_energy", resources.max_energy)
+	gui.play_flipbook(gui.get_node("thermometer"), "thermometer" .. Data.get_turn())
 end
 
-local function render_button(button_url, message_id)
-	local button = gui.get_node(button_url)
-	active_buttons[message_id] = button
-	gui.set_enabled(button, true)
-end
-
-local function render_build(options)
-	gui.set_enabled(gui.get_node(BUILD_BOX), true)
-	pos = gui.get_position(gui.get_node(BUILD_BUTTON_BOX))
-	for option, cost in pairs(options) do
-		local clones = clone_button(BUILD_BUTTON_BOX, hash(option))
-		gui.set_position(clones[BUILD_BUTTON_BOX], pos)
-		gui.play_flipbook(clones[BUILD_BUTTON_PIC], option)
-		pos.x = pos.x + BUILD_BUTTON_X_STEP
-		local wood = clones[BUILD_BUTTON_WOOD_TXT]
-		gui.set_text(wood, "Wood: " .. cost.wood)
-		local stone = clones[BUILD_BUTTON_STONE_TXT]
-		gui.set_text(stone, "Stone: " .. cost.stone)
-	end
-end
-
-local function render_focus_info(hex)
-	gui.set_enabled(gui.get_node(HEX_BOX), true)
-	if hex.building ~= nil then
-		gui.set_text(gui.get_node(HEX_NAME_TEXT), hex.building.type.name)
-		gui.play_flipbook(gui.get_node(HEX_PIC), hex.building.type.name)
-
-		if hex.building.type.cells ~= nil then
-			gui.set_enabled(gui.get_node(HEX_RESOURCE), true)
-			local type = hex.building.type.production.type
-			gui.play_flipbook(gui.get_node(HEX_RESOURCE_ICON), type)
-			if hex.building.production[type] ~= nil then
-				gui.set_text(gui.get_node(HEX_RESOURCE_TEXT), " +" .. hex.building.production[type])
-			else
-				gui.set_text(gui.get_node(HEX_RESOURCE_TEXT), " +0")
-			end
-			for i = 1, hex.building.type.cells do
-				render_button(HEX_HUMAN_CELL .. i, hash("human_cell" .. i))
-				if i <= hex.building.human then
-					gui.play_flipbook(gui.get_node(HEX_HUMAN_CELL .. i), "human_cell_full")
-				elseif hex.building.type.production[i - 1] ~= nil then
-					gui.play_flipbook(gui.get_node(HEX_HUMAN_CELL .. i), "human_cell_required")
-				else
-					gui.play_flipbook(gui.get_node(HEX_HUMAN_CELL .. i), "human_cell_extra")
-				end
-			end
-		else
-			gui.set_enabled(gui.get_node(HEX_RESOURCE), false)
-		end
-
-		if hex.building.type.actions ~= nil then
-			pos = gui.get_position(gui.get_node(HEX_ACTION_BOX))
-			for key, value in pairs(hex.building.type.actions) do
-				local clones = clone_button(HEX_ACTION_BOX, hash(key))
-				gui.set_text(clones[HEX_ACTION_TEXT], value.title)
-				gui.set_position(clones[HEX_ACTION_BOX], pos)
-				pos.y = pos.y - ACTION_BUTTON_Y_STEP
-			end
-		end
+local function setup_production_buttons()
+	local down = gui.get_node("down")
+	local up = gui.get_node("up")
+	gui.set_enabled(down, true)
+	gui.set_enabled(up, true)
+	local power = Data.get_focus().content.power
+	if power == 0 then
+		gui.play_flipbook(down, "minus_off")
 	else
-		gui.set_enabled(gui.get_node(HEX_RESOURCE), false)
-		gui.set_text(gui.get_node(HEX_NAME_TEXT), hex.landscape.name)
-		gui.play_flipbook(gui.get_node(HEX_PIC), hex.landscape.name)
+		gui.play_flipbook(down, "minus")
+		Data.set_down_action("minus")
+		down_action = "minus"
 	end
+	if power == 3 then
+		gui.play_flipbook(up, "plus_off")
+	else
+		gui.play_flipbook(up, "plus")
+		Data.set_up_action("plus")
+	end
+end
 
-	if hex.unit ~= nil then
-		gui.set_enabled(gui.get_node(UNIT_BOX), true)
-		gui.set_text(gui.get_node(UNIT_NAME_TEXT), hex.unit.type.name)
-		gui.play_flipbook(gui.get_node(UNIT_PIC), hex.unit.type.name)
-		gui.set_text(gui.get_node(UNIT_HEALTH_TEXT),": " .. hex.unit.health)
-		gui.set_text(gui.get_node(UNIT_POWER_TEXT),": " .. hex.unit.type.power)
+local function setup_control_idle()
+	local down = gui.get_node("down")
+	local up = gui.get_node("up")
+	gui.set_enabled(down, true)
+	gui.set_enabled(up, true)
+	gui.play_flipbook(down, "decline_off")
+	gui.play_flipbook(up, "confirm_off")
+end
 
-		if hex.unit.action and hex.unit.team == "ally" then
-			pos = gui.get_position(gui.get_node(UNIT_ACTION_BOX))
-	
-			local clones = clone_button(UNIT_ACTION_BOX, hash("move_action"))
-			gui.set_text(clones[UNIT_ACTION_TEXT], "Move")
-			gui.set_position(clones[UNIT_ACTION_BOX], pos)
-			pos.y = pos.y - ACTION_BUTTON_Y_STEP
-			
-			if hex.unit.type.feats.shoot ~= nil then
-				if hex.unit.type.feats.reload ~= nil and hex.unit.need_reload then
-					clones = clone_button(UNIT_ACTION_BOX, hash("reload_action"))
-					gui.set_text(clones[UNIT_ACTION_TEXT], "Reload")
-					gui.set_position(clones[UNIT_ACTION_BOX], pos)
-					pos.y = pos.y - ACTION_BUTTON_Y_STEP
-				else
-					clones = clone_button(UNIT_ACTION_BOX, hash("shoot_action"))
-					gui.set_text(clones[UNIT_ACTION_TEXT], "Shoot")
-					gui.set_position(clones[UNIT_ACTION_BOX], pos)
-					pos.y = pos.y - ACTION_BUTTON_Y_STEP
-				end
-			elseif hex.unit.type.power > 0 then
-				clones = clone_button(UNIT_ACTION_BOX, hash("attack_action"))
-				gui.set_text(clones[UNIT_ACTION_TEXT], "Attack")
-				gui.set_position(clones[UNIT_ACTION_BOX], pos)
-				pos.y = pos.y - ACTION_BUTTON_Y_STEP
-			end
-			
-			if hex.unit.type.feats.healer ~= nil then
-				clones = clone_button(UNIT_ACTION_BOX, hash("heal_action"))
-				gui.set_text(clones[UNIT_ACTION_TEXT], "Heal")
-				gui.set_position(clones[UNIT_ACTION_BOX], pos)
-				pos.y = pos.y - ACTION_BUTTON_Y_STEP
-			end
+local function setup_control_target()
+	Data.set_down_action("decline")
+	local down = gui.get_node("down")
+	local up = gui.get_node("up")
+	gui.set_enabled(down, true)
+	gui.set_enabled(up, true)
+	gui.play_flipbook(down, "decline")
+	gui.play_flipbook(up, "confirm_off")
+end
 
-			if hex.building ~= nil and hex.building.team == "enemy" then
-				clones = clone_button(UNIT_ACTION_BOX, hash("destroy_action"))
-				gui.set_text(clones[UNIT_ACTION_TEXT], "Destroy")
-				gui.set_position(clones[UNIT_ACTION_BOX], pos)
-				pos.y = pos.y - ACTION_BUTTON_Y_STEP
-			end
+local function setup_control_action()
+	Data.set_down_action("decline")
+	Data.set_up_action("confirm")
+	local down = gui.get_node("down")
+	local up = gui.get_node("up")
+	gui.set_enabled(down, true)
+	gui.set_enabled(up, true)
+	gui.play_flipbook(down, "decline")
+	gui.play_flipbook(up, "confirm")
+end
+
+local function clear()
+	gui.set_enabled(gui.get_node("help"), false)
+	Data.set_to_build(nil)
+	Data.set_awaiting_target(false)
+	Data.set_down_action("none")
+	Data.set_up_action("none")
+	Data.set_selected_action(-1)
+	gui.set_enabled(gui.get_node("down"), false)
+	gui.set_enabled(gui.get_node("up"), false)
+	gui.set_enabled(gui.get_node("production"), false)
+	for i = 0, 2 do
+		gui.set_enabled(gui.get_node("action" .. tostring(i)), false)
+	end
+	gui.set_enabled(gui.get_node("build_box"), false)
+	gui.set_enabled(gui.get_node("thermometer_mini"), false)
+end
+
+local function render_focus()
+	clear()
+	local focus = Data.get_focus()
+	if not focus or focus.content == nil or focus.content.type.team ~= "ally" then
+		return
+	end
+	gui.set_enabled(gui.get_node("thermometer_mini"), true)
+	gui.play_flipbook(gui.get_node("thermometer_mini"), "thermometer_mini" .. math.min(focus.content.temp, 4))
+	for i, action in pairs(focus.content.type.actions) do
+		local action_node = gui.get_node("action" .. i)
+		gui.set_enabled(action_node, true)
+		gui.play_flipbook(action_node, "action_" .. action.type .. "_off")
+	end
+	if focus.content.type.name == "drill" then
+		if focus.landscape.name == "empty" then
+			return
+		end
+		local type = focus.landscape.name
+		local power = focus.content.power
+		local production_node = gui.get_node("production")
+		gui.set_enabled(production_node, true)
+		gui.play_flipbook(production_node, "drill_" .. type .. power)
+		setup_production_buttons()
+	end
+	if focus.content.type.name == "cooler" then
+		local power = focus.content.power
+		local production_node = gui.get_node("production")
+		gui.set_enabled(production_node, true)
+		gui.play_flipbook(production_node, "cooler" .. power)
+		setup_production_buttons()
+	end
+	if focus.content.type.name == "solar" then
+		local power = Content.solar.production[Data.get_heat()][1]
+		local production_node = gui.get_node("production")
+		gui.set_enabled(production_node, true)
+		gui.play_flipbook(production_node, "solar" .. power)
+	end
+	if focus.content.type.name == "laser" then
+		local production_node = gui.get_node("production")
+		gui.set_enabled(production_node, true)
+		gui.play_flipbook(production_node, "laser0")
+		setup_control_idle()
+	end
+	if focus.content.type.name == "static" then
+		local production_node = gui.get_node("production")
+		gui.set_enabled(production_node, true)
+		gui.play_flipbook(production_node, "static0")
+		setup_control_idle()
+	end
+	if focus.content.type.name == "rocket" then
+		gui.set_enabled(gui.get_node("build_box"), true)
+	end
+end
+
+local function up_released()
+	if Data.get_up_action() == "plus" and Data.get_resources().energy > 0 then
+		Data.update_resources("energy", -1)
+		local focus = Data.get_focus()
+		focus.content.power = focus.content.power + 1
+		update_resources()
+		render_focus()
+	end
+	if Data.get_up_action() == "confirm" then
+		local name = Data.get_focus().content.type.actions[Data.get_selected_action()].type
+		clear()
+		msg.post("game", hash(name))
+	end
+end
+
+local function down_released()
+	if Data.get_down_action() == "minus" then
+		Data.update_resources("energy", 1)
+		local focus = Data.get_focus()
+		focus.content.power = focus.content.power - 1
+		update_resources()
+		render_focus()
+	end
+	if Data.get_down_action() == "decline" then
+		render_focus()
+	end
+end
+
+local function end_turn_released()
+	clear()
+	msg.post("game", hash("end_turn"))
+end
+
+local function action_released(i)
+	if i == Data.get_selected_action() then
+		render_focus()
+		return
+	end
+	if Data.get_focus().content.type.actions[i].cost.energy > Data.get_resources().energy then
+		--maybe add screen
+		render_focus()
+		return
+	end
+	clear()
+	gui.set_enabled(gui.get_node("thermometer_mini"), true)
+	gui.play_flipbook(gui.get_node("thermometer_mini"), "thermometer_mini" .. math.min(Data.get_focus().content.temp, 4))
+	Data.set_selected_action(i)
+	for j, action in pairs(Data.get_focus().content.type.actions) do
+		local action_node = gui.get_node("action" .. j)
+		gui.set_enabled(action_node, true)
+		if j == i then
+			gui.play_flipbook(action_node, "action_" .. action.type)
+		else
+			gui.play_flipbook(action_node, "action_" .. action.type .. "_off")
 		end
 	end
+	local name = Data.get_focus().content.type.actions[i].type
+	if name == "move" then
+		Data.set_awaiting_target(true)
+		setup_control_target()
+	elseif name == "shoot1" then
+		Data.set_awaiting_target(true)
+		local production_node = gui.get_node("production")
+		gui.set_enabled(production_node, true)
+		gui.play_flipbook(production_node, "laser1target")
+		setup_control_target()
+	elseif name == "shoot2" then
+		Data.set_awaiting_target(true)
+		local production_node = gui.get_node("production")
+		gui.set_enabled(production_node, true)
+		gui.play_flipbook(production_node, "laser2target")
+		setup_control_target()
+	elseif name == "splash" then
+		local production_node = gui.get_node("production")
+		gui.set_enabled(production_node, true)
+		gui.play_flipbook(production_node, "static1shoot")
+		msg.post("game", hash("splash_impact"))
+		setup_control_action()
+	end
 end
 
-local function clear_gui()
-	for message_id, button in pairs(active_buttons) do
-		gui.set_enabled(button, false)
-		active_buttons[message_id] = nil
+local function target_selected()
+	local i = Data.get_selected_action()
+	local name = Data.get_focus().content.type.actions[Data.get_selected_action()].type
+	clear()
+	gui.set_enabled(gui.get_node("thermometer_mini"), true)
+	gui.play_flipbook(gui.get_node("thermometer_mini"), "thermometer_mini" .. math.min(Data.get_focus().content.temp, 4))
+	Data.set_selected_action(i)
+	if name == "shoot1" then
+		local production_node = gui.get_node("production")
+		gui.set_enabled(production_node, true)
+		gui.play_flipbook(production_node, "laser1shoot")
+		setup_control_action()
+		up_released()
+	elseif name == "shoot2" then
+		local production_node = gui.get_node("production")
+		gui.set_enabled(production_node, true)
+		gui.play_flipbook(production_node, "laser2shoot")
+		setup_control_action()
+		up_released()
 	end
-	gui.set_enabled(gui.get_node(BUILD_BOX), false)
-	gui.set_enabled(gui.get_node(HEX_BOX), false)
-	gui.set_enabled(gui.get_node(UNIT_BOX), false)
-	gui.set_enabled(gui.get_node(END_TURN_BOX), false)
-	gui.set_enabled(gui.get_node(CLOSE_BOX), false)
-	gui.set_enabled(gui.get_node(BUILD_ACTION_BOX), false)
-	clear_cloned_buttons()
 end
+
+local function build_released(type)
+	if Content[type].cost.metal > Data.get_resources().metal then
+		-- TODO screen
+		return
+	end
+	clear()
+	Data.set_awaiting_target(true)
+	Data.set_to_build(type)
+	local production_node = gui.get_node("production")
+	gui.set_enabled(production_node, true)
+	gui.play_flipbook(production_node, "none")
+	setup_control_target()
+end
+
+local function game_over()
+	update_resources()
+	msg.post(".", "release_input_focus")
+	gui.set_enabled(gui.get_node("final_canvas"), true)
+	gui.set_enabled(gui.get_node("final"), true)
+	set_number("crystal_final", Data.get_resources().crystal)
+end
+
+local help_mode = 0
 
 function init(self)
 	msg.post(".", "acquire_input_focus")
+	clear()
+	help_mode = 1
+	gui.set_enabled(gui.get_node("final_canvas"), true)
+	gui.play_flipbook(gui.get_node("help"), "help" .. help_mode)
+	gui.set_enabled(gui.get_node("help"), true)
 end
 
 function on_message(self, message_id, message, sender)
-	if message_id == hash("render") then
-		clear_gui()
-		if message.end_turn ~= nil then
-			render_button(END_TURN_BUTTON, message.end_turn)
-		end
-		if message.focus ~= nil then
-			render_focus_info(message.focus)
-		end
-		if message.build ~= nil then
-			render_button(BUILD_ACTION_BOX, message.build)
-		end
-		if message.build_menu ~= nil then
-			render_build(message.build_menu)
-		end
-		if message.back ~= nil then
-			render_button(CLOSE_BOX, message.back)
-		end
+	if message_id == hash("focus") then
+		render_focus()
+	end
+	if message_id == hash("target") then
+		target_selected()
 	end
 	if message_id == hash("update_resources") then
-		local food = gui.get_node("resource_food/text")
-		gui.set_text(food, ": " .. message.food)
-		local wood = gui.get_node("resource_wood/text")
-		gui.set_text(wood, ": " .. message.wood)
-		local human = gui.get_node("resource_human/text")
-		gui.set_text(human, ": " .. message.human)
-		local human_free = gui.get_node("resource_human_free/text")
-		gui.set_text(human_free, ": " .. message.human_free)
-		local house = gui.get_node("resource_house/text")
-		gui.set_text(house, ": " .. message.house)
+		update_resources()
+	end
+	if message_id == hash("game_over") then
+		game_over()
 	end
 end
 
 function on_input(self, action_id, action)
 	if action_id == hash("touch") and action.released then
-		for message_id, node in pairs(active_buttons) do
-			if gui.pick_node(node, action.x, action.y) then
-				msg.post("game", message_id)
+		if help_mode > 0 and help_mode < 5 then
+			help_mode = help_mode + 1
+			gui.play_flipbook(gui.get_node("help"), "help" .. help_mode)
+			sound.play("game#button_click")
+			return
+		end
+		if help_mode == 5 then
+			help_mode = 0
+			gui.set_enabled(gui.get_node("final_canvas"), false)
+			gui.set_enabled(gui.get_node("help"), false)
+			sound.play("game#button_click")
+			return
+		end
+		local help_button = gui.get_node("help_button")
+		if gui.pick_node(help_button, action.x, action.y) then
+			help_mode = 1
+			gui.set_enabled(gui.get_node("final_canvas"), true)
+			gui.play_flipbook(gui.get_node("help"), "help" .. help_mode)
+			gui.set_enabled(gui.get_node("help"), true)
+			sound.play("game#button_click")
+			return
+		end
+		local up = gui.get_node("up")
+		if gui.is_enabled(up, true) and gui.pick_node(up, action.x, action.y) then
+			up_released()
+			sound.play("game#button_click")
+			return
+		end
+		local down = gui.get_node("down")
+		if gui.is_enabled(down, true) and gui.pick_node(down, action.x, action.y) then
+			down_released()
+			sound.play("game#button_click")
+			return
+		end
+		local end_turn = gui.get_node("end_turn")
+		if gui.is_enabled(end_turn, true) and gui.pick_node(end_turn, action.x, action.y) then
+			end_turn_released()
+			sound.play("game#button_click")
+			return
+		end
+		for i = 0, 2 do
+			local action_node = gui.get_node("action" .. i)
+			if gui.is_enabled(action_node, true) and gui.pick_node(action_node, action.x, action.y) then
+				action_released(i)
+				sound.play("game#select_action")
+				return
 			end
 		end
+		if gui.is_enabled(gui.get_node("build_box"), false) then
+			if gui.pick_node(gui.get_node("solar/button"), action.x, action.y) then
+				build_released("solar")
+				sound.play("game#button_click")
+				return
+			end
+			if gui.pick_node(gui.get_node("drill/button"), action.x, action.y) then
+				build_released("drill")
+				sound.play("game#button_click")
+				return
+			end
+			if gui.pick_node(gui.get_node("cooler/button"), action.x, action.y) then
+				build_released("cooler")
+				sound.play("game#button_click")
+				return
+			end
+			if gui.pick_node(gui.get_node("static/button"), action.x, action.y) then
+				build_released("static")
+				sound.play("game#button_click")
+				return
+			end
+			if gui.pick_node(gui.get_node("laser/button"), action.x, action.y) then
+				build_released("laser")
+				sound.play("game#button_click")
+				return
+			end
+		end
+		msg.post("game", hash("released"), {x = action.x, y = action.y})
 	end
 end

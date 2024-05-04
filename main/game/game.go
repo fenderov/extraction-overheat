@@ -58,3 +58,67 @@ components {
     w: 1.0
   }
 }
+components {
+  id: "button_click"
+  component: "/main/source/sfx/button_click.sound"
+  position {
+    x: 0.0
+    y: 0.0
+    z: 0.0
+  }
+  rotation {
+    x: 0.0
+    y: 0.0
+    z: 0.0
+    w: 1.0
+  }
+}
+components {
+  id: "select_hex"
+  component: "/main/source/sfx/select_hex.sound"
+  position {
+    x: 0.0
+    y: 0.0
+    z: 0.0
+  }
+  rotation {
+    x: 0.0
+    y: 0.0
+    z: 0.0
+    w: 1.0
+  }
+}
+components {
+  id: "select_action"
+  component: "/main/source/sfx/select_action.sound"
+  position {
+    x: 0.0
+    y: 0.0
+    z: 0.0
+  }
+  rotation {
+    x: 0.0
+    y: 0.0
+    z: 0.0
+    w: 1.0
+  }
+}
+embedded_components {
+  id: "content_factory"
+  type: "factory"
+  data: "prototype: \"/main/game/content/content.go\"\n"
+  "load_dynamically: false\n"
+  "dynamic_prototype: false\n"
+  ""
+  position {
+    x: 0.0
+    y: 0.0
+    z: 0.0
+  }
+  rotation {
+    x: 0.0
+    y: 0.0
+    z: 0.0
+    w: 1.0
+  }
+}

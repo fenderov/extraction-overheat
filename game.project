@@ -6,14 +6,14 @@ render = /orthographic/render/orthographic.renderc
 shared_state = 1
 
 [display]
-width = 1920
-height = 1080
+width = 540
+height = 960
 
 [android]
 input_method = HiddenInputField
 
 [project]
-title = Agressive Barbarians
+title = Extraction Overheat
 dependencies#0 = https://github.com/britzl/defold-orthographic/archive/refs/tags/3.2.1.zip
 
 [graphics]
@@ -27,4 +27,9 @@ max_particle_count = 4096
 
 [sprite]
 max_count = 1024
+
+[html5]
+show_made_with_defold = 0
+show_fullscreen_button = 0
+show_console_banner = 0
 
