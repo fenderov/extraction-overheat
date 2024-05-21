@@ -198,6 +198,9 @@ local function action_released(i)
 	local name = Data.get_focus().content.type.actions[i].type
 	if name == "move" then
 		Data.set_awaiting_target(true)
+		local production_node = gui.get_node("production")
+		gui.set_enabled(production_node, true)
+		gui.play_flipbook(production_node, "move")
 		setup_control_target()
 	elseif name == "shoot1" then
 		Data.set_awaiting_target(true)
@@ -369,4 +372,40 @@ function on_input(self, action_id, action)
 		end
 		msg.post("game", hash("released"), {x = action.x, y = action.y})
 	end
+end
+
+function update(self, dt)
+	local w, h = window.get_size()
+	local scale = math.floor(math.min(w / 180, h / 320) + 0.05)
+
+	local wc = math.floor(w / 2)
+	local hc = math.floor(h / 2)
+	local scaled_w = math.floor(w / scale)
+
+	local resource_box = gui.get_node(hash("resource_box"))
+	gui.set_scale(resource_box, vmath.vector3(scale, scale, 1))
+	local sz = gui.get_size(resource_box)
+	sz.x = scaled_w
+	gui.set_size(resource_box, sz)
+	gui.set_position(resource_box, vmath.vector3(wc, h, 0))
+
+	local hex_box = gui.get_node(hash("hex_box"))
+	gui.set_scale(hex_box, vmath.vector3(scale, scale, 1))
+	local sz = gui.get_size(hex_box)
+	sz.x = scaled_w
+	gui.set_size(hex_box, sz)
+	gui.set_position(hex_box, vmath.vector3(wc, 0, 0))
+
+	local final_canvas = gui.get_node(hash("final_canvas"))
+	gui.set_size(final_canvas, vmath.vector3(w, h, 0))
+	gui.set_position(final_canvas, vmath.vector3(wc, hc, 0))
+
+	local final = gui.get_node(hash("final"))
+	gui.set_scale(final, vmath.vector3(scale, scale, 1))
+	gui.set_position(final, vmath.vector3(wc, hc, 0))
+
+	local help = gui.get_node(hash("help"))
+	gui.set_scale(help, vmath.vector3(scale, scale, 1))
+	gui.set_position(help, vmath.vector3(wc, hc, 0))
+
 end

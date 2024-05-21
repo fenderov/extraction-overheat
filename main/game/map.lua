@@ -1,6 +1,3 @@
-local Landscape = require "main/game/landscape"
-local Building = require "main/game/building"
-local Unit = require "main/game/unit"
 local Data = require "main/game/data"
 
 local TILE_WIDTH = 32
@@ -70,15 +67,16 @@ function Map.screen_to_hex(x, y)
 	return Data.get_hex(x, y)
 end
 
-function Map.set_radius(r)
-	scale = math.min(PLAY_ZONE_WIDTH / TILE_WIDTH / (2 * r + 1), PLAY_ZONE_HEIGHT / TILE_WIDTH / (1.5 * r + 1))
-	scale = 3
-	for hex in Data.iterate() do
-		go.animate(hex.id, "scale", go.PLAYBACK_ONCE_FORWARD, scale, go.EASING_OUTBOUNCE, 1)
-		go.animate(hex.id, "position", go.PLAYBACK_ONCE_FORWARD, hex_to_world(hex.x, hex.y), go.EASING_OUTBOUNCE, 1)
-		if hex.unit ~= nil then
-			go.animate(hex.unit.id, "scale", go.PLAYBACK_ONCE_FORWARD, scale, go.EASING_OUTBOUNCE, 1)
-			go.animate(hex.unit.id, "position", go.PLAYBACK_ONCE_FORWARD, unit_to_world(hex.x, hex.y), go.EASING_OUTBOUNCE, 1)
+function Map.set_scale(s)
+	if scale ~= s then
+		scale = s
+		for hex in Data.iterate() do
+			go.set(hex.id, "scale", scale)
+			go.set(hex.id, "position", hex_to_world(hex.x, hex.y))
+			if hex.content ~= nil then
+				go.set(hex.content.id, "scale", scale)
+				go.set(hex.content.id, "position", unit_to_world(hex.x, hex.y))
+			end
 		end
 	end
 end
@@ -234,6 +232,9 @@ local function is_highlighted(hex)
 end
 
 function Map.update()
+	local w, h = window.get_size()
+	local scale = math.floor(math.min(w / 180, h / 320))
+	Map.set_scale(scale)
 	for hex in Data.iterate() do
 		if hex.visible then
 			msg.post(hex.id, "enable")

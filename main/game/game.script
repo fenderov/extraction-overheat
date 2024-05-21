@@ -1,7 +1,4 @@
 local Map = require "main/game/map"
-local Landscape = require "main/game/landscape"
-local Building = require "main/game/building"
-local Unit = require "main/game/unit"
 local Heat = require "main/game/heat"
 local Data = require "main/game/data"
 local Content = require "main/game/content"
@@ -186,7 +183,7 @@ end
 
 function init(self)
 	math.randomseed(os.time())
-	Map.set_radius(4)
+	Map.set_scale(3)
 	Map.generate()
 	Map.content_set(Data.get_hex(0, 0), Content.rocket)
 	Map.content_set(Data.get_hex(-2, 0), Content.solar)
@@ -196,8 +193,7 @@ function init(self)
 	Data.set_resources("max_energy", 0)
 	Data.set_resources("energy", 0)
 	harvest_energy()
-	msg.post("camera", "use_projection", { projection = hash("FIXED_AUTO") })
-	msg.post("gui", hash("update_resources"))
+	msg.post("camera", "use_projection", { projection = hash("FIXED_ZOOM") })
 end
 
 function update(self, dt)
@@ -246,7 +242,7 @@ function on_message(self, message_id, message, sender)
 	end
 	if message_id == hash("splash") then
 		local focus = Data.get_focus()
-		Data.update_resources("energy", -2)
+		Data.update_resources("energy", -1)
 		focus.content.temp = focus.content.temp + 1
 		for target in Data.iterate() do
 			if Map.is_splash_target(target) then

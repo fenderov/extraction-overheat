@@ -155,7 +155,7 @@ local Content = {
             [1] = {
                 type = "splash",
                 cost = {
-                    energy = 2,
+                    energy = 1,
                     temp = 1,
                 },
                 distance = 1,
